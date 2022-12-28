@@ -9,6 +9,8 @@ def is_float(x: any) -> bool:
 		return False
 	return True
 
+# Data loading and definition ##################################################
+
 names = [
 	'anagraficapazientiattivi',
 	'diagnosi',
@@ -29,6 +31,8 @@ codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
 codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
+# Initial data cleaning ########################################################
+
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
 # to use less memory.
 
@@ -43,6 +47,10 @@ anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiatti
 # TODO: understand scolarita ,statocivile, professione, origine
 if (anagraficapazientiattivi.groupby(['idcentro', 'idana']).size() != 1).any():
 	raise Exception("(idcentro, idana) are not the primary key for anagraficapazientiattivi")
+anagraficapazientiattivi = anagraficapazientiattivi.drop(
+	anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index
+)
+assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
 
 # Used to make sure that there are no patience outside of this group in the
 # other tables.
@@ -90,21 +98,24 @@ prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore, is it categorical?
 
-# Task 1 point 2
-anagraficapazientiattivi = anagraficapazientiattivi.drop(
-	anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index
-)
-assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
+del patients
 
+# Tasks 1 ######################################################################
+
+# Point 2
 birth_death = anagraficapazientiattivi[['idcentro', 'idana', 'annonascita', 'annodecesso']]
 
 def is_between(df: pandas.DataFrame) -> pandas.Series:
-	return (df.annonascita <= df.data) & (df.data <= df.annodecesso)
+	mdf = df.merge(birth_death)
+	assert len(mdf) == len(df)
+	return (mdf.annonascita <= mdf.data) & (mdf.data <= mdf.annodecesso)
 
-# diagnosi.merge(birth_death, on=['idcentro', 'idana'])
-# esamilaboratorioparametri.data
-# esamilaboratorioparametricalcolati.data
-# esamistrumentali.data
-# prescrizionidiabetefarmaci.data
-# prescrizionidiabetenonfarmaci.data
-# prescrizioninondiabete.data
+diagnosi = diagnosi[is_between(diagnosi)]
+esamilaboratorioparametri = esamilaboratorioparametri[is_between(esamilaboratorioparametri)]
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati[is_between(esamilaboratorioparametricalcolati)]
+esamistrumentali = esamistrumentali[is_between(esamistrumentali)]
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci[is_between(prescrizionidiabetefarmaci)]
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci[is_between(prescrizionidiabetenonfarmaci)]
+prescrizioninondiabete = prescrizioninondiabete[is_between(prescrizioninondiabete)]
+
+del birth_death, is_between

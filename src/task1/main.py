@@ -44,37 +44,48 @@ anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiatti
 if (anagraficapazientiattivi.groupby(['idcentro', 'idana']).size() != 1).any():
 	raise Exception("(idcentro, idana) are not the primary key for anagraficapazientiattivi")
 
+# Used to make sure that there are no patience outside of this group in the
+# other tables.
+patients = anagraficapazientiattivi[['idcentro', 'idana']]
+
 diagnosi = diagnosi.drop(diagnosi.columns[0], axis=1)
+diagnosi = diagnosi.merge(patients)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
 diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
 # wtf = diagnosi.valore[~diagnosi.valore.apply(is_float)].value_counts()
 
 esamilaboratorioparametri = esamilaboratorioparametri.drop(esamilaboratorioparametri.columns[0], axis=1)
+esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
 esamilaboratorioparametri.codiceamd = esamilaboratorioparametri.codiceamd.astype(codice_amd.dtype)
 
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop(esamilaboratorioparametricalcolati.columns[0], axis=1)
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
 esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
 esamilaboratorioparametricalcolati.codiceamd = esamilaboratorioparametricalcolati.codiceamd.astype(codice_amd.dtype)
 esamilaboratorioparametricalcolati.codicestitch = esamilaboratorioparametricalcolati.codicestitch.astype(codice_stitch.dtype)
 
 esamistrumentali = esamistrumentali.drop(esamistrumentali.columns[0], axis=1)
+esamistrumentali = esamistrumentali.merge(patients)
 esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
 esamistrumentali.codiceamd = esamistrumentali.codiceamd.astype(codice_amd.dtype)
 esamistrumentali.valore = esamistrumentali.valore.astype('category')
 
 prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.drop(prescrizionidiabetefarmaci.columns[0], axis=1)
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 # NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
 
 prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.drop(prescrizionidiabetenonfarmaci.columns[0], axis=1)
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
 prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
 
 prescrizioninondiabete = prescrizioninondiabete.drop(prescrizioninondiabete.columns[0], axis=1)
+prescrizioninondiabete = prescrizioninondiabete.merge(patients)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore, is it categorical?
@@ -87,7 +98,7 @@ assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.ann
 
 birth_death = anagraficapazientiattivi[['idcentro', 'idana', 'annonascita', 'annodecesso']]
 
-def is_between(df: pandas.DataFrame):
+def is_between(df: pandas.DataFrame) -> pandas.Series:
 	return (df.annonascita <= df.data) & (df.data <= df.annodecesso)
 
 # diagnosi.merge(birth_death, on=['idcentro', 'idana'])

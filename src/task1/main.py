@@ -19,7 +19,7 @@ names = [
 	'prescrizionidiabetenonfarmaci',
 	'prescrizioninondiabete',
 ]
-paths = [f'sample/{name}.csv' for name in names]
+paths = [f'data/{name}.csv' for name in names]
 
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_csv, paths))))

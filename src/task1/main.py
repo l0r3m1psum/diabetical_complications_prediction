@@ -47,14 +47,16 @@ anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiatti
 # TODO: understand scolarita ,statocivile, professione, origine
 if (anagraficapazientiattivi.groupby(['idcentro', 'idana']).size() != 1).any():
 	raise Exception("(idcentro, idana) are not the primary key for anagraficapazientiattivi")
+anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
 anagraficapazientiattivi = anagraficapazientiattivi.drop(
 	anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index
 )
 assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
+# TODO: check that annodiagnosidiabete and annoprimoaccesso are between birth and death.
 
 # Used to make sure that there are no patience outside of this group in the
 # other tables.
-patients = anagraficapazientiattivi[['idcentro', 'idana']]
+patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
 
 diagnosi = diagnosi.drop(diagnosi.columns[0], axis=1)
 diagnosi = diagnosi.merge(patients)
@@ -103,10 +105,10 @@ del patients
 # Tasks 1 ######################################################################
 
 # Point 2
-birth_death = anagraficapazientiattivi[['idcentro', 'idana', 'annonascita', 'annodecesso']]
+birth_death = anagraficapazientiattivi[['annonascita', 'annodecesso']]
 
 def is_between(df: pandas.DataFrame) -> pandas.Series:
-	mdf = df.merge(birth_death)
+	mdf = df.join(birth_death, ['idcentro','idana'], 'inner')
 	assert len(mdf) == len(df)
 	return (mdf.annonascita <= mdf.data) & (mdf.data <= mdf.annodecesso)
 
@@ -119,3 +121,13 @@ prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci[is_between(prescri
 prescrizioninondiabete = prescrizioninondiabete[is_between(prescrizioninondiabete)]
 
 del birth_death, is_between
+
+# Point 3
+group = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data
+# The visits are in different months iff the min month in the group for a
+# patient is different from the max of that group.
+# TODO: check that the month is in the same year.
+serie = (group.min().dt.month != group.max().dt.month)
+# We create a dataframe with only the idcentro and idana of valid patients.
+frame = serie[serie].index.to_frame().reset_index(drop=True)
+diagnosi = diagnosi.merge(frame)

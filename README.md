@@ -11,7 +11,8 @@ on the `stderr`.
 
 To avoid this you can launch Python redirecting the `stderr` to `/dev/null` i.e.
 `python3 2>/dev/null`. Remember to use `matplotlib.pyplot.show()` to show the
-window after creating the plot.
+window after creating the plot, or `matplotlib.pyplot.savefig('foo.pdf')` if you
+want to save the plot instead.
 
 As a piece of trivia the backends of `matplotlib` that have `agg` in the name
 use the [Anti-Grain Geometry](https://agg.sourceforge.net/antigrain.com/)

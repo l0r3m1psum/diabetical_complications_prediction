@@ -36,27 +36,37 @@ codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
 # to use less memory.
 
-anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi.columns[0], axis=1)
-anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype('category')
+anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi.columns[0], axis=1) #removing row number from dataset
+
+#setting category and types of data
 anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazientiattivi.annodiagnosidiabete.astype('Int16'), format='%Y')
-# NOTE: tipodiabete is always 5.
-anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
+anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype('category')
+anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
+
+#we can remove the feature "tipodiabete" since every instance of the dataset has the same value (5)
+print("does tipodiabete contains always the same value?",len(anagraficapazientiattivi) == len(anagrafica[anagrafica.tipodiabete == 5]))
+
 # TODO: understand scolarita ,statocivile, professione, origine
+#checking that idcentro,idana are actually a primary key
 if (anagraficapazientiattivi.groupby(['idcentro', 'idana']).size() != 1).any():
 	raise Exception("(idcentro, idana) are not the primary key for anagraficapazientiattivi")
 anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
+
+#Invalid feature cleaning
+n_invalid_patients = anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso]
 anagraficapazientiattivi = anagraficapazientiattivi.drop(
 	anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index
 )
 assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
 # TODO: check that annodiagnosidiabete and annoprimoaccesso are between birth and death.
 
-# Used to make sure that there are no patience outside of this group in the
-# other tables.
-patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
+#patient remaining TODO class distribution (what does it mean?)
+print("Remaining patients after eliminating inconsistent birth and deaths: ",len(anagraficapazientiattivi), " patients eliminated: ", n_invalid_patients)
+#all the tables must contain ONLY active patients
+patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)# Used to make sure that there are no patience outside of this group in the other tables
 
 diagnosi = diagnosi.drop(diagnosi.columns[0], axis=1)
 diagnosi = diagnosi.merge(patients)

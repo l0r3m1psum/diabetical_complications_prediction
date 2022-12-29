@@ -134,10 +134,22 @@ del birth_death, is_between
 
 # Point 3
 
-group = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data
-# The visits are in different months iff the min month in the group for a
-# patient is different from the max of that group.
-serie = (group.min().dt.to_period('M') != group.max().dt.to_period('M'))
-# We create a dataframe with only the idcentro and idana of valid patients.
-frame = serie[serie].index.to_frame().reset_index(drop=True)
-diagnosi = diagnosi.merge(frame)
+def clean_same_month(df: pandas.DataFrame) -> pandas.DataFrame:
+	group = df.groupby(['idcentro', 'idana'], group_keys=True).data
+	# The visits are in different months iff the min month in the group for a
+	# patient is different from the max of that group.
+	serie = (group.min().dt.to_period('M') != group.max().dt.to_period('M'))
+	# We create a dataframe with only the idcentro and idana of valid patients.
+	frame = serie[serie].index.to_frame().reset_index(drop=True)
+	res = df.merge(frame)
+	return res
+
+diagnosi = clean_same_month(diagnosi)
+esamilaboratorioparametri = clean_same_month(esamilaboratorioparametri)
+esamilaboratorioparametricalcolati = clean_same_month(esamilaboratorioparametricalcolati)
+esamistrumentali = clean_same_month(esamistrumentali)
+prescrizionidiabetefarmaci = clean_same_month(prescrizionidiabetefarmaci)
+prescrizionidiabetenonfarmaci = clean_same_month(prescrizionidiabetenonfarmaci)
+prescrizioninondiabete = clean_same_month(prescrizioninondiabete)
+
+del clean_same_month

@@ -118,22 +118,22 @@ del patients
 
 birth_death = anagraficapazientiattivi[['annonascita', 'annodecesso']]
 
-def clean_in_between(df: pandas.DataFrame) -> pandas.DataFrame:
+def clean_is_between(df: pandas.DataFrame) -> pandas.DataFrame:
 	# We add birth and death information of each patient to the table.
 	mdf = df.join(birth_death, ['idcentro','idana'], 'inner')
 	assert len(mdf) == len(df)
 	res = df[(mdf.annonascita <= mdf.data) & (mdf.data <= mdf.annodecesso)]
 	return res
 
-diagnosi = clean_in_between(diagnosi)
-esamilaboratorioparametri = clean_in_between(esamilaboratorioparametri)
-esamilaboratorioparametricalcolati = clean_in_between(esamilaboratorioparametricalcolati)
-esamistrumentali = clean_in_between(esamistrumentali)
-prescrizionidiabetefarmaci = clean_in_between(prescrizionidiabetefarmaci)
-prescrizionidiabetenonfarmaci = clean_in_between(prescrizionidiabetenonfarmaci)
-prescrizioninondiabete = clean_in_between(prescrizioninondiabete)
+diagnosi = clean_is_between(diagnosi)
+esamilaboratorioparametri = clean_is_between(esamilaboratorioparametri)
+esamilaboratorioparametricalcolati = clean_is_between(esamilaboratorioparametricalcolati)
+esamistrumentali = clean_is_between(esamistrumentali)
+prescrizionidiabetefarmaci = clean_is_between(prescrizionidiabetefarmaci)
+prescrizionidiabetenonfarmaci = clean_is_between(prescrizionidiabetenonfarmaci)
+prescrizioninondiabete = clean_is_between(prescrizioninondiabete)
 
-del birth_death, is_between
+del birth_death, clean_is_between
 
 # Point 3
 

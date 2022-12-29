@@ -137,8 +137,7 @@ del birth_death, is_between
 group = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data
 # The visits are in different months iff the min month in the group for a
 # patient is different from the max of that group.
-# TODO: check that the month is in the same year.
-serie = (group.min().dt.month != group.max().dt.month)
+serie = (group.min().dt.to_period('M') != group.max().dt.to_period('M'))
 # We create a dataframe with only the idcentro and idana of valid patients.
 frame = serie[serie].index.to_frame().reset_index(drop=True)
 diagnosi = diagnosi.merge(frame)

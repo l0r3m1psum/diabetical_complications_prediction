@@ -47,7 +47,7 @@ anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype('category
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 
 #we can remove the feature "tipodiabete" since every instance of the dataset has the same value (5)
-print("does tipodiabete contain always the same value? ",len(anagraficapazientiattivi) == len(anagrafica[anagrafica.tipodiabete == 5]))
+print("does tipodiabete contain always the same value? ",len(anagraficapazientiattivi) == len(anagraficapazientiattivi[anagraficapazientiattivi.tipodiabete == 5]))
 
 # TODO: understand scolarita ,statocivile, professione, origine
 #checking that idcentro,idana are actually a primary key

@@ -47,7 +47,7 @@ anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype('category
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 
 #we can remove the feature "tipodiabete" since every instance of the dataset has the same value (5)
-print("does tipodiabete contains always the same value?",len(anagraficapazientiattivi) == len(anagrafica[anagrafica.tipodiabete == 5]))
+print("does tipodiabete contain always the same value? ",len(anagraficapazientiattivi) == len(anagrafica[anagrafica.tipodiabete == 5]))
 
 # TODO: understand scolarita ,statocivile, professione, origine
 #checking that idcentro,idana are actually a primary key
@@ -63,7 +63,7 @@ anagraficapazientiattivi = anagraficapazientiattivi.drop(
 assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
 # TODO: check that annodiagnosidiabete and annoprimoaccesso are between birth and death.
 
-#patient remaining TODO class distribution (what does it mean?)
+#patient remaining TODO class distribution (i.e. with or without cardiovascular events)
 print("Remaining patients after eliminating inconsistent birth and deaths: ",len(anagraficapazientiattivi), " patients eliminated: ", n_invalid_patients)
 #all the tables must contain ONLY active patients
 patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)# Used to make sure that there are no patience outside of this group in the other tables
@@ -133,6 +133,7 @@ prescrizioninondiabete = prescrizioninondiabete[is_between(prescrizioninondiabet
 del birth_death, is_between
 
 # Point 3
+
 group = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data
 # The visits are in different months iff the min month in the group for a
 # patient is different from the max of that group.

@@ -41,6 +41,9 @@ sex = pandas.Categorical(['M', 'F'])
 # TODO: find the real one.
 sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 
+def print_all() -> None:
+	for name in names: print(name, globals()[name], sep='\n')
+
 # Initial data cleaning ########################################################
 
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
@@ -74,7 +77,7 @@ def is_not_between(s: pandas.Series) -> pandas.MultiIndex:
 # TODO: what should I do with NaTs in annodiagnosidiabete and annoprimoaccesso.
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annodiagnosidiabete))
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annoprimoaccesso))
-logging.info(f'After initial cleaning: {len(anagraficapazientiattivi)=}')
+logging.info(f'After  initial cleaning: {len(anagraficapazientiattivi)=}')
 del is_not_between
 
 #patient remaining TODO class distribution (i.e. with or without cardiovascular events)
@@ -89,14 +92,14 @@ diagnosi.data = pandas.to_datetime(diagnosi.data)
 diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
 # wtf = diagnosi.valore[~diagnosi.valore.apply(is_float)].value_counts()
-logging.info(f'After initial cleaning: {len(diagnosi)=}')
+logging.info(f'After  initial cleaning: {len(diagnosi)=}')
 
 logging.info(f'Before initial cleaning: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = remove_first_column(esamilaboratorioparametri)
 esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
 esamilaboratorioparametri.codiceamd = esamilaboratorioparametri.codiceamd.astype(codice_amd.dtype)
-logging.info(f'After initial cleaning: {len(esamilaboratorioparametri)=}')
+logging.info(f'After  initial cleaning: {len(esamilaboratorioparametri)=}')
 
 logging.info(f'Before initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = remove_first_column(esamilaboratorioparametricalcolati)
@@ -104,7 +107,7 @@ esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(pa
 esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
 esamilaboratorioparametricalcolati.codiceamd = esamilaboratorioparametricalcolati.codiceamd.astype(codice_amd.dtype)
 esamilaboratorioparametricalcolati.codicestitch = esamilaboratorioparametricalcolati.codicestitch.astype(codice_stitch.dtype)
-logging.info(f'After initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
+logging.info(f'After  initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 
 logging.info(f'Before initial cleaning: {len(esamistrumentali)=}')
 esamistrumentali = remove_first_column(esamistrumentali)
@@ -112,7 +115,7 @@ esamistrumentali = esamistrumentali.merge(patients)
 esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
 esamistrumentali.codiceamd = esamistrumentali.codiceamd.astype(codice_amd.dtype)
 esamistrumentali.valore = esamistrumentali.valore.astype('category')
-logging.info(f'After initial cleaning: {len(esamistrumentali)=}')
+logging.info(f'After  initial cleaning: {len(esamistrumentali)=}')
 
 logging.info(f'Before initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
@@ -120,7 +123,7 @@ prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 # NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
-logging.info(f'After initial cleaning: {len(prescrizionidiabetefarmaci)=}')
+logging.info(f'After  initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 
 logging.info(f'Before initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
@@ -128,7 +131,7 @@ prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
 prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
-logging.info(f'After initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
+logging.info(f'After  initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 
 logging.info(f'Before initial cleaning: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = remove_first_column(prescrizioninondiabete)
@@ -136,11 +139,13 @@ prescrizioninondiabete = prescrizioninondiabete.merge(patients)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore, is it categorical?
-logging.info(f'After initial cleaning: {len(prescrizioninondiabete)=}')
+logging.info(f'After  initial cleaning: {len(prescrizioninondiabete)=}')
 
 del remove_first_column, patients
 
 # Tasks 1 ######################################################################
+
+logging.info('Start of task 1.')
 
 # Point 2
 
@@ -148,18 +153,39 @@ birth_death = anagraficapazientiattivi[['annonascita', 'annodecesso']]
 
 def clean_is_between(df: pandas.DataFrame) -> pandas.DataFrame:
 	# We add birth and death information of each patient to the table.
+
 	mdf = df.join(birth_death, ['idcentro','idana'], 'inner')
 	assert len(mdf) == len(df)
-	res = df[(mdf.annonascita <= mdf.data) & (mdf.data <= mdf.annodecesso)]
+	res = df[(mdf.annonascita <= mdf.data) & (mdf.data <= mdf.annodecesso.fillna(sampling_date))]
 	return res
 
+logging.info(f'Before point 2: {len(diagnosi)=}')
 diagnosi = clean_is_between(diagnosi)
+logging.info(f'After  point 2: {len(diagnosi)=}')
+
+logging.info(f'Before point 2: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = clean_is_between(esamilaboratorioparametri)
+logging.info(f'After  point 2: {len(esamilaboratorioparametri)=}')
+
+logging.info(f'Before point 2: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = clean_is_between(esamilaboratorioparametricalcolati)
+logging.info(f'After  point 2: {len(esamilaboratorioparametricalcolati)=}')
+
+logging.info(f'Before point 2: {len(esamistrumentali)=}')
 esamistrumentali = clean_is_between(esamistrumentali)
+logging.info(f'After  point 2: {len(esamistrumentali)=}')
+
+logging.info(f'Before point 2: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = clean_is_between(prescrizionidiabetefarmaci)
+logging.info(f'After  point 2: {len(prescrizionidiabetefarmaci)=}')
+
+logging.info(f'Before point 2: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = clean_is_between(prescrizionidiabetenonfarmaci)
+logging.info(f'After  point 2: {len(prescrizionidiabetenonfarmaci)=}')
+
+logging.info(f'Before point 2: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = clean_is_between(prescrizioninondiabete)
+logging.info(f'After  point 2: {len(prescrizioninondiabete)=}')
 
 del birth_death, clean_is_between
 
@@ -175,12 +201,36 @@ def clean_same_month(df: pandas.DataFrame) -> pandas.DataFrame:
 	res = df.merge(frame)
 	return res
 
+logging.info(f'Before point 3: {len(diagnosi)=}')
 diagnosi = clean_same_month(diagnosi)
+logging.info(f'After  point 3: {len(diagnosi)=}')
+
+logging.info(f'Before point 3: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = clean_same_month(esamilaboratorioparametri)
+logging.info(f'After  point 3: {len(esamilaboratorioparametri)=}')
+
+logging.info(f'Before point 3: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = clean_same_month(esamilaboratorioparametricalcolati)
+logging.info(f'After  point 3: {len(esamilaboratorioparametricalcolati)=}')
+
+logging.info(f'Before point 3: {len(esamistrumentali)=}')
 esamistrumentali = clean_same_month(esamistrumentali)
+logging.info(f'After  point 3: {len(esamistrumentali)=}')
+
+logging.info(f'Before point 3: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = clean_same_month(prescrizionidiabetefarmaci)
+logging.info(f'After  point 3: {len(prescrizionidiabetefarmaci)=}')
+
+logging.info(f'Before point 3: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = clean_same_month(prescrizionidiabetenonfarmaci)
+logging.info(f'After  point 3: {len(prescrizionidiabetenonfarmaci)=}')
+
+logging.info(f'Before point 3: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = clean_same_month(prescrizioninondiabete)
+logging.info(f'After  point 3: {len(prescrizioninondiabete)=}')
 
 del clean_same_month
+
+# Point 6
+
+# TODO: remove NA, NaN and NaT from the data and plotting.

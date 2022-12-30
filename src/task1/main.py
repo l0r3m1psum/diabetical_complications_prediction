@@ -231,6 +231,19 @@ logging.info(f'After  point 3: {len(prescrizioninondiabete)=}')
 
 del clean_same_month
 
+<<<<<<< Updated upstream
 # Point 6
 
 # TODO: remove NA, NaN and NaT from the data and plotting.
+=======
+# Point 4
+
+# Point 6
+#sex is always present
+assert len(anagraficapazientiattivi[anagraficapazientiattivi['sesso'].isna()]) == 0
+
+#tipodiabete is always 5, we can remove it
+if (len(anagraficapazientiattivi) == len(anagraficapazientiattivi[anagraficapazientiattivi['tipodiabete'] == 5])):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['tipodiabete'])
+
+>>>>>>> Stashed changes

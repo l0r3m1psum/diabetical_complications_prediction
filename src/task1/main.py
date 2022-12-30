@@ -29,6 +29,7 @@ del pool
 
 codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
 codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
+sex = pandas.Categorical(['M', 'F'])
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
 # The date in which the dataset was sampled.
@@ -51,7 +52,7 @@ anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazi
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
-anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype('category')
+anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype(sex.dtype)
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 # TODO: understand scolarita ,statocivile, professione, origine
 

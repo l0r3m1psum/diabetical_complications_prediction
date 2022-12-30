@@ -1,6 +1,10 @@
 import pandas
 import matplotlib.pyplot
 import multiprocessing.pool
+import logging
+
+logging.basicConfig(format='%(asctime)s %(message)s')
+logging.getLogger().setLevel(logging.INFO)
 
 def is_float(x: any) -> bool:
 	try:
@@ -23,6 +27,7 @@ names = [
 ]
 paths = [f'data/{name}.csv' for name in names]
 
+logging.info('Loading data.')
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_csv, paths))))
 del pool
@@ -46,6 +51,7 @@ def remove_first_column(df: pandas.DataFrame) -> pandas.DataFrame:
 	res = df.drop(df.columns[0], axis=1)
 	return res
 
+logging.info(f'Before initial cleaning: {len(anagraficapazientiattivi)=}')
 anagraficapazientiattivi = remove_first_column(anagraficapazientiattivi)
 anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'], verify_integrity=True)
 anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazientiattivi.annodiagnosidiabete.astype('Int16'), format='%Y')
@@ -53,15 +59,10 @@ anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiatti
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype(sex.dtype)
+# NOTE: this can probabbly be dropped since they are all equal to 5
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 # TODO: understand scolarita ,statocivile, professione, origine
-
-#we can remove the feature "tipodiabete" since every instance of the dataset has the same value (5)
-print("Does tipodiabete contain always the same value? ", (anagraficapazientiattivi.tipodiabete == 5).all())
-
-# Invalid feature cleaning
 assert not anagraficapazientiattivi.annonascita.isnull().any()
-print(f'Before initial cleaning: {len(anagraficapazientiattivi)=}')
 # Dropping inconsistent birth and deaths (keep in mind that comparisons on NaTs always return False).
 anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index)
 # Dropping future deaths.
@@ -73,7 +74,7 @@ def is_not_between(s: pandas.Series) -> pandas.MultiIndex:
 # TODO: what should I do with NaTs in annodiagnosidiabete and annoprimoaccesso.
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annodiagnosidiabete))
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annoprimoaccesso))
-print(f'After initial cleaning: {len(anagraficapazientiattivi)=}')
+logging.info(f'After initial cleaning: {len(anagraficapazientiattivi)=}')
 del is_not_between
 
 #patient remaining TODO class distribution (i.e. with or without cardiovascular events)
@@ -81,61 +82,61 @@ del is_not_between
 # Used to make sure that there are no patience outside of this group in the other tables.
 patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
 
-print(f'Before initial cleaning: {len(diagnosi)=}')
+logging.info(f'Before initial cleaning: {len(diagnosi)=}')
 diagnosi = remove_first_column(diagnosi)
 diagnosi = diagnosi.merge(patients)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
 diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
 # wtf = diagnosi.valore[~diagnosi.valore.apply(is_float)].value_counts()
-print(f'After initial cleaning: {len(diagnosi)=}')
+logging.info(f'After initial cleaning: {len(diagnosi)=}')
 
-print(f'Before initial cleaning: {len(esamilaboratorioparametri)=}')
+logging.info(f'Before initial cleaning: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = remove_first_column(esamilaboratorioparametri)
 esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
 esamilaboratorioparametri.codiceamd = esamilaboratorioparametri.codiceamd.astype(codice_amd.dtype)
-print(f'After initial cleaning: {len(esamilaboratorioparametri)=}')
+logging.info(f'After initial cleaning: {len(esamilaboratorioparametri)=}')
 
-print(f'Before initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
+logging.info(f'Before initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = remove_first_column(esamilaboratorioparametricalcolati)
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
 esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
 esamilaboratorioparametricalcolati.codiceamd = esamilaboratorioparametricalcolati.codiceamd.astype(codice_amd.dtype)
 esamilaboratorioparametricalcolati.codicestitch = esamilaboratorioparametricalcolati.codicestitch.astype(codice_stitch.dtype)
-print(f'After initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
+logging.info(f'After initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 
-print(f'Before initial cleaning: {len(esamistrumentali)=}')
+logging.info(f'Before initial cleaning: {len(esamistrumentali)=}')
 esamistrumentali = remove_first_column(esamistrumentali)
 esamistrumentali = esamistrumentali.merge(patients)
 esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
 esamistrumentali.codiceamd = esamistrumentali.codiceamd.astype(codice_amd.dtype)
 esamistrumentali.valore = esamistrumentali.valore.astype('category')
-print(f'After initial cleaning: {len(esamistrumentali)=}')
+logging.info(f'After initial cleaning: {len(esamistrumentali)=}')
 
-print(f'Before initial cleaning: {len(prescrizionidiabetefarmaci)=}')
+logging.info(f'Before initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
 prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 # NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
-print(f'After initial cleaning: {len(prescrizionidiabetefarmaci)=}')
+logging.info(f'After initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 
-print(f'Before initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
+logging.info(f'Before initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
 prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
 prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
-print(f'After initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
+logging.info(f'After initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 
-print(f'Before initial cleaning: {len(prescrizioninondiabete)=}')
+logging.info(f'Before initial cleaning: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = remove_first_column(prescrizioninondiabete)
 prescrizioninondiabete = prescrizioninondiabete.merge(patients)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore, is it categorical?
-print(f'After initial cleaning: {len(prescrizioninondiabete)=}')
+logging.info(f'After initial cleaning: {len(prescrizioninondiabete)=}')
 
 del remove_first_column, patients
 

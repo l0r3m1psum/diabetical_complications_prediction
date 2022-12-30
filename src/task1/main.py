@@ -63,6 +63,10 @@ anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazient
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype(sex.dtype)
 # NOTE: this can probabbly be dropped since they are all equal to 5
+anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
+anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
+anagraficapazientiattivi.professione = anagraficapazientiattivi.professione.astype('category')
+anagraficapazientiattivi.origine = anagraficapazientiattivi.origine.astype('category')
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 # TODO: understand scolarita ,statocivile, professione, origine
 assert not anagraficapazientiattivi.annonascita.isnull().any()
@@ -231,14 +235,11 @@ logging.info(f'After  point 3: {len(prescrizioninondiabete)=}')
 
 del clean_same_month
 
-<<<<<<< Updated upstream
-# Point 6
-
-# TODO: remove NA, NaN and NaT from the data and plotting.
-=======
 # Point 4
 
 # Point 6
+# TODO: remove NA, NaN and NaT from the data and plotting.
+
 #sex is always present
 assert len(anagraficapazientiattivi[anagraficapazientiattivi['sesso'].isna()]) == 0
 
@@ -246,4 +247,25 @@ assert len(anagraficapazientiattivi[anagraficapazientiattivi['sesso'].isna()]) =
 if (len(anagraficapazientiattivi) == len(anagraficapazientiattivi[anagraficapazientiattivi['tipodiabete'] == 5])):
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['tipodiabete'])
 
->>>>>>> Stashed changes
+dataset_len = len(anagraficapazientiattivi)
+
+max_null_percentage = 40
+null_scolarita = anagraficapazientiattivi.scolarita.isnull().sum()
+if (null_scolarita*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['scolarita'])
+
+null_statocivile = anagraficapazientiattivi.statocivile.isnull().sum()
+if (null_statocivile*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['statocivile'])
+
+null_professione = anagraficapazientiattivi.professione.isnull().sum()
+if (null_professione*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['professione'])
+
+null_origine = anagraficapazientiattivi.origine.isnull().sum()
+if (null_origine*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['origine'])
+
+
+#matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
+#matplotlib.pyplot.show()

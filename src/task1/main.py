@@ -35,6 +35,7 @@ del pool
 codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
 codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
 sex = pandas.Categorical(['M', 'F'])
+meal_id = pandas.Categorical(i for i in range(1, 7))
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
 # The date in which the dataset was sampled.
@@ -123,6 +124,7 @@ prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 # NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
+prescrizionidiabetefarmaci.idpasto = prescrizionidiabetefarmaci.idpasto.astype(meal_id.dtype)
 logging.info(f'After  initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 
 logging.info(f'Before initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')

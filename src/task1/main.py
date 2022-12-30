@@ -31,6 +31,10 @@ codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
 codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
+# The date in which the dataset was sampled.
+# TODO: find the real one.
+sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
+
 # Initial data cleaning ########################################################
 
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
@@ -42,6 +46,7 @@ def remove_first_column(df: pandas.DataFrame) -> pandas.DataFrame:
 	return res
 
 anagraficapazientiattivi = remove_first_column(anagraficapazientiattivi)
+anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'], verify_integrity=True)
 anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazientiattivi.annodiagnosidiabete.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
@@ -53,22 +58,24 @@ anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.asty
 #we can remove the feature "tipodiabete" since every instance of the dataset has the same value (5)
 print("Does tipodiabete contain always the same value? ", (anagraficapazientiattivi.tipodiabete == 5).all())
 
-# Checking that (idcentro, idana) is a primary key.
-if (anagraficapazientiattivi.groupby(['idcentro', 'idana']).size() != 1).any():
-	raise Exception("(idcentro, idana) are not the primary key for anagraficapazientiattivi")
-anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
-
 # Invalid feature cleaning
-mask = anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso
-n_invalid_patients = (mask).sum()
-anagraficapazientiattivi = anagraficapazientiattivi.drop(
-	anagraficapazientiattivi[mask].index
-)
-assert not (anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso).any()
-# TODO: check that annodiagnosidiabete and annoprimoaccesso are between birth and death.
-print("Remaining patients after eliminating inconsistent birth and deaths:", len(anagraficapazientiattivi), "patients eliminated:", n_invalid_patients)
+assert not anagraficapazientiattivi.annonascita.isnull().any()
+print(f'Number of patients before initial cleaning: {len(anagraficapazientiattivi)}')
+# Dropping inconsistent birth and deaths (keep in mind that comparisons on NaTs always return False).
+anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index)
+# Dropping future deaths.
+anagraficapazientiattivi = anagraficapazientiattivi.drop((anagraficapazientiattivi.annodecesso[~anagraficapazientiattivi.annodecesso.isnull()] < sampling_date).index)
+def is_not_between(s: pandas.Series) -> pandas.MultiIndex:
+	res = (anagraficapazientiattivi.annonascita < s) & (s < anagraficapazientiattivi.annodecesso.fillna(sampling_date))
+	res = (anagraficapazientiattivi[~res]).index
+	return res
+# TODO: what should I do with NaTs in annodiagnosidiabete and annoprimoaccesso.
+anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annodiagnosidiabete))
+anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annoprimoaccesso))
+print(f'Remaining patients after initial cleaning: {len(anagraficapazientiattivi)}')
+del is_not_between
+
 #patient remaining TODO class distribution (i.e. with or without cardiovascular events)
-del mask, n_invalid_patients
 
 # Used to make sure that there are no patience outside of this group in the other tables.
 patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)

@@ -64,6 +64,10 @@ anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazient
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype(sex.dtype)
 # NOTE: this can probabbly be dropped since they are all equal to 5
+anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
+anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
+anagraficapazientiattivi.professione = anagraficapazientiattivi.professione.astype('category')
+anagraficapazientiattivi.origine = anagraficapazientiattivi.origine.astype('category')
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
 # TODO: understand scolarita ,statocivile, professione, origine
 assert not anagraficapazientiattivi.annonascita.isnull().any()
@@ -233,11 +237,42 @@ logging.info(f'After  point 3: {len(prescrizioninondiabete)=}')
 
 del clean_same_month
 
-# Point 6
+# Point 4
 
+# Point 6
 # TODO: remove NA, NaN and NaT from the data and plotting.
 
-(esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD927'].codicestitch == 'STITCH001').all()
-(esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD013'].codicestitch == 'STITCH002').all()
-(esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD304'].codicestitch == 'STITCH005').all()
-(esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isnull()].codicestitch.isin(['STITCH003', 'STITCH004'])).all()
+#sex is always present
+assert len(anagraficapazientiattivi[anagraficapazientiattivi['sesso'].isna()]) == 0
+
+#tipodiabete is always 5, we can remove it
+if (len(anagraficapazientiattivi) == len(anagraficapazientiattivi[anagraficapazientiattivi['tipodiabete'] == 5])):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['tipodiabete'])
+
+dataset_len = len(anagraficapazientiattivi)
+max_null_percentage = 40
+
+null_scolarita = anagraficapazientiattivi.scolarita.isnull().sum()
+if (null_scolarita*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['scolarita'])
+del null_scolarita
+
+null_statocivile = anagraficapazientiattivi.statocivile.isnull().sum()
+if (null_statocivile*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['statocivile'])
+del null_statocivile
+
+null_professione = anagraficapazientiattivi.professione.isnull().sum()
+if (null_professione*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['professione'])
+del null_professione
+
+null_origine = anagraficapazientiattivi.origine.isnull().sum()
+if (null_origine*100/dataset_len > max_null_percentage):
+	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['origine'])
+del null_origine
+
+del dataset_len, max_null_percentage
+
+#matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
+#matplotlib.pyplot.show()

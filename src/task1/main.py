@@ -277,37 +277,15 @@ del clean_same_month
 # Point 6
 # TODO: remove NA, NaN and NaT from the data and plotting.
 
-#sex is always present
 assert anagraficapazientiattivi['sesso'].isna().sum() == 0
 
-#tipodiabete is always 5, we can remove it
-if (anagraficapazientiattivi.tipodiabete == 5).all():
-	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['tipodiabete'])
+assert (anagraficapazientiattivi.tipodiabete == 5).all()
+anagraficapazientiattivi = anagraficapazientiattivi.drop('tipodiabete', axis=1)
 
-dataset_len = len(anagraficapazientiattivi)
-max_null_percentage = 40
-
-null_scolarita = anagraficapazientiattivi.scolarita.isnull().sum()
-if null_scolarita*100/dataset_len > max_null_percentage:
-	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['scolarita'])
-del null_scolarita
-
-null_statocivile = anagraficapazientiattivi.statocivile.isnull().sum()
-if null_statocivile*100/dataset_len > max_null_percentage:
-	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['statocivile'])
-del null_statocivile
-
-null_professione = anagraficapazientiattivi.professione.isnull().sum()
-if null_professione*100/dataset_len > max_null_percentage:
-	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['professione'])
-del null_professione
-
-null_origine = anagraficapazientiattivi.origine.isnull().sum()
-if null_origine*100/dataset_len > max_null_percentage:
-	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['origine'])
-del null_origine
-
-del dataset_len, max_null_percentage
+percentages = anagraficapazientiattivi.isna().sum()/len(anagraficapazientiattivi)
+mask = (percentages > 0.4) & (percentages.index != 'annodecesso')
+anagraficapazientiattivi = anagraficapazientiattivi.drop(percentages[mask].index, axis=1)
+del percentages, mask
 
 #matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
 #matplotlib.pyplot.show()

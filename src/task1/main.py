@@ -13,6 +13,10 @@ def is_float(x: any) -> bool:
 		return False
 	return True
 
+def source(fname: str) -> None:
+	with open(fname) as f:
+		exec(f.read())
+
 # Data loading and definition ##################################################
 
 names = [
@@ -45,7 +49,7 @@ sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 def print_all() -> None:
 	for name in names: print(name, globals()[name], sep='\n')
 
-macro_vascular_diseases = ['AMD047', 'AMD048', 'AMD049', 'AMD071', 'AMD081', 'AMD082', 'AMD208', 'AMD303']
+macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
 
 # Initial data cleaning ########################################################
 
@@ -89,71 +93,100 @@ del is_not_between
 
 #patient remaining TODO class distribution (i.e. with or without cardiovascular events)
 
-# Used to make sure that there are no patience outside of this group in the other tables.
-patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
-
-logging.info(f'Before initial cleaning: {len(diagnosi)=}')
 diagnosi = remove_first_column(diagnosi)
-diagnosi = diagnosi.merge(patients)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
 diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
 # wtf = diagnosi.valore[~diagnosi.valore.apply(is_float)].value_counts()
-logging.info(f'After  initial cleaning: {len(diagnosi)=}')
 
-logging.info(f'Before initial cleaning: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = remove_first_column(esamilaboratorioparametri)
-esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
 esamilaboratorioparametri.codiceamd = esamilaboratorioparametri.codiceamd.astype(codice_amd.dtype)
-logging.info(f'After  initial cleaning: {len(esamilaboratorioparametri)=}')
 
-logging.info(f'Before initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = remove_first_column(esamilaboratorioparametricalcolati)
-esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
 esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
 esamilaboratorioparametricalcolati.codiceamd = esamilaboratorioparametricalcolati.codiceamd.astype(codice_amd.dtype)
 esamilaboratorioparametricalcolati.codicestitch = esamilaboratorioparametricalcolati.codicestitch.astype(codice_stitch.dtype)
-logging.info(f'After  initial cleaning: {len(esamilaboratorioparametricalcolati)=}')
 
-logging.info(f'Before initial cleaning: {len(esamistrumentali)=}')
 esamistrumentali = remove_first_column(esamistrumentali)
-esamistrumentali = esamistrumentali.merge(patients)
 esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
 esamistrumentali.codiceamd = esamistrumentali.codiceamd.astype(codice_amd.dtype)
 esamistrumentali.valore = esamistrumentali.valore.astype('category')
-logging.info(f'After  initial cleaning: {len(esamistrumentali)=}')
 
-logging.info(f'Before initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
-prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 # NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
 prescrizionidiabetefarmaci.idpasto = prescrizionidiabetefarmaci.idpasto.astype(meal_id.dtype)
-logging.info(f'After  initial cleaning: {len(prescrizionidiabetefarmaci)=}')
 
-logging.info(f'Before initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
-prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
 prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore
-logging.info(f'After  initial cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 
-logging.info(f'Before initial cleaning: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = remove_first_column(prescrizioninondiabete)
-prescrizioninondiabete = prescrizioninondiabete.merge(patients)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 # TODO: understand valore, is it categorical?
-logging.info(f'After  initial cleaning: {len(prescrizioninondiabete)=}')
 
-del remove_first_column, patients
+del remove_first_column
 
 # Tasks 1 ######################################################################
 
 logging.info('Start of task 1.')
+
+# Point 1
+
+# The diagnosi table is the only one containing data of patients with macro
+# vascular diseases.
+assert diagnosi.codiceamd.isin(macro_vascular_diseases).any()
+assert not esamilaboratorioparametri.codiceamd.isin(macro_vascular_diseases).any()
+assert not esamilaboratorioparametricalcolati.codiceamd.isin(macro_vascular_diseases).any()
+assert not esamistrumentali.codiceamd.isin(macro_vascular_diseases).any()
+assert not prescrizionidiabetenonfarmaci.codiceamd.isin(macro_vascular_diseases).any()
+assert not prescrizioninondiabete.codiceamd.isin(macro_vascular_diseases).any()
+
+logging.info(f'Before Point 1: {len(diagnosi)=}')
+diagnosi = diagnosi[diagnosi.codiceamd.isin(macro_vascular_diseases)]
+
+logging.info(f'Before Point 1: {len(anagraficapazientiattivi)=}')
+anagraficapazientiattivi = diagnosi[['idcentro','idana']] \
+	.join(anagraficapazientiattivi, ['idcentro','idana'], 'inner') \
+	.drop_duplicates(['idcentro','idana']) \
+	.set_index(['idcentro','idana'])
+logging.info(f'After  Point 1: {len(anagraficapazientiattivi)=}')
+
+# Used to make sure that there are no patients outside of this group in the other tables.
+patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
+
+diagnosi = diagnosi.merge(patients)
+logging.info(f'After  Point 1: {len(diagnosi)=}')
+
+logging.info(f'Before Point 1: {len(esamilaboratorioparametri)=}')
+esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
+logging.info(f'After  Point 1: {len(esamilaboratorioparametri)=}')
+
+logging.info(f'Before Point 1: {len(esamilaboratorioparametricalcolati)=}')
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
+logging.info(f'After  Point 1: {len(esamilaboratorioparametricalcolati)=}')
+
+logging.info(f'Before Point 1: {len(esamistrumentali)=}')
+esamistrumentali = esamistrumentali.merge(patients)
+logging.info(f'After  Point 1: {len(esamistrumentali)=}')
+
+logging.info(f'Before Point 1: {len(prescrizionidiabetefarmaci)=}')
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
+logging.info(f'After  Point 1: {len(prescrizionidiabetefarmaci)=}')
+
+logging.info(f'Before Point 1: {len(prescrizionidiabetenonfarmaci)=}')
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
+logging.info(f'After  Point 1: {len(prescrizionidiabetenonfarmaci)=}')
+
+logging.info(f'Before Point 1: {len(prescrizioninondiabete)=}')
+prescrizioninondiabete = prescrizioninondiabete.merge(patients)
+logging.info(f'After  Point 1: {len(prescrizioninondiabete)=}')
+
+del patients
 
 # Point 2
 

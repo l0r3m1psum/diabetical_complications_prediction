@@ -1,5 +1,7 @@
 import torch
 
+# https://github.com/duskybomb/tlstm/blob/master/tlstm.py
+
 n_features = 1
 lstm = torch.nn.LSTM(
 	input_size=n_features+1, # The +1 is the time for the T-LSTM

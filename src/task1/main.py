@@ -45,6 +45,8 @@ sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 def print_all() -> None:
 	for name in names: print(name, globals()[name], sep='\n')
 
+macro_vascular_diseases = ['AMD047', 'AMD048', 'AMD049', 'AMD071', 'AMD081', 'AMD082', 'AMD208', 'AMD303']
+
 # Initial data cleaning ########################################################
 
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32

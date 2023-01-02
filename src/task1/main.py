@@ -243,32 +243,32 @@ del clean_same_month
 # TODO: remove NA, NaN and NaT from the data and plotting.
 
 #sex is always present
-assert len(anagraficapazientiattivi[anagraficapazientiattivi['sesso'].isna()]) == 0
+assert anagraficapazientiattivi['sesso'].isna().sum() == 0
 
 #tipodiabete is always 5, we can remove it
-if (len(anagraficapazientiattivi) == len(anagraficapazientiattivi[anagraficapazientiattivi['tipodiabete'] == 5])):
+if (anagraficapazientiattivi.tipodiabete == 5).all():
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['tipodiabete'])
 
 dataset_len = len(anagraficapazientiattivi)
 max_null_percentage = 40
 
 null_scolarita = anagraficapazientiattivi.scolarita.isnull().sum()
-if (null_scolarita*100/dataset_len > max_null_percentage):
+if null_scolarita*100/dataset_len > max_null_percentage:
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['scolarita'])
 del null_scolarita
 
 null_statocivile = anagraficapazientiattivi.statocivile.isnull().sum()
-if (null_statocivile*100/dataset_len > max_null_percentage):
+if null_statocivile*100/dataset_len > max_null_percentage:
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['statocivile'])
 del null_statocivile
 
 null_professione = anagraficapazientiattivi.professione.isnull().sum()
-if (null_professione*100/dataset_len > max_null_percentage):
+if null_professione*100/dataset_len > max_null_percentage:
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['professione'])
 del null_professione
 
 null_origine = anagraficapazientiattivi.origine.isnull().sum()
-if (null_origine*100/dataset_len > max_null_percentage):
+if null_origine*100/dataset_len > max_null_percentage:
 	anagraficapazientiattivi = anagraficapazientiattivi.drop(columns = ['origine'])
 del null_origine
 

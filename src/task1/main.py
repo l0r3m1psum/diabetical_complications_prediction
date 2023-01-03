@@ -278,10 +278,19 @@ del clean_same_month
 
 # Point 4
 
-# AMD004 .clip(40, 200)
-# AMD005 .clip(40, 130)
-# AMD007 .clip(50, 500)
-# AMD008 .clip(5, 15)
+esamilaboratorioparametri.valore.update(
+	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD004'].valore.clip(40, 200)
+)
+esamilaboratorioparametri.valore.update(
+	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD005'].valore.clip(40, 130)
+)
+esamilaboratorioparametri.valore.update(
+	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD007'].valore.clip(50, 500)
+)
+esamilaboratorioparametri.valore.update(
+	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD008'].valore.clip(5, 15)
+)
+
 # STITCH002 .clip(30, 300)
 # STITCH003 .clip(60, 330)
 
@@ -351,6 +360,7 @@ del percentages, mask
 
 logging.info('Dumping data.')
 dataframes = [globals()[name] for name in names]
+# TODO: fix warnings.
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	_ = pool.starmap(
 		lambda df, path: df.to_csv(path),

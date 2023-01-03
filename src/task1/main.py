@@ -278,6 +278,8 @@ del clean_same_month
 
 # Point 4
 
+logging.info('Updating esamilaboratorioparametri for point 4.')
+
 esamilaboratorioparametri.valore.update(
 	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD004'].valore.clip(40, 200)
 )
@@ -326,6 +328,7 @@ all_events = pandas.concat([
 # TODO: delete patients with less than two events.
 (all_events.groupby(['idcentro', 'idana'], group_keys=True).count() < 2)
 
+# NOTE: probabably the join here is useless.
 last_event = all_events.join(anagraficapazientiattivi, ['idcentro', 'idana']) \
 	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
 
@@ -347,6 +350,8 @@ assert anagraficapazientiattivi['sesso'].isna().sum() == 0
 
 assert (anagraficapazientiattivi.tipodiabete == 5).all()
 anagraficapazientiattivi = anagraficapazientiattivi.drop('tipodiabete', axis=1)
+assert anagraficapazientiattivi.annodecesso.isna().all()
+anagraficapazientiattivi = anagraficapazientiattivi.drop('annodecesso', axis=1)
 
 percentages = anagraficapazientiattivi.isna().sum()/len(anagraficapazientiattivi)
 mask = (percentages > 0.4) & (percentages.index != 'annodecesso')
@@ -355,6 +360,8 @@ del percentages, mask
 
 #matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
 #matplotlib.pyplot.show()
+
+# TODO: remove remaining NA: for name in names: print(name, globals()[name].isna().any(), sep='\n')
 
 # Data dumping #################################################################
 

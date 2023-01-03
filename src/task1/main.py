@@ -52,6 +52,9 @@ def print_all() -> None:
 # This are also the cardiovascular events.
 macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
 
+# Where the cleaned data will be saved.
+paths_for_cleaned = [f'data/{name}_clean.csv' for name in names]
+
 # Initial data cleaning ########################################################
 
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
@@ -275,6 +278,13 @@ del clean_same_month
 
 # Point 4
 
+# AMD004 .clip(40, 200)
+# AMD005 .clip(40, 130)
+# AMD007 .clip(50, 500)
+# AMD008 .clip(5, 15)
+# STITCH002 .clip(30, 300)
+# STITCH003 .clip(60, 330)
+
 # Point 5
 # TODO: log this step.
 
@@ -336,3 +346,14 @@ del percentages, mask
 
 #matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
 #matplotlib.pyplot.show()
+
+# Data dumping #################################################################
+
+logging.info('Dumping data.')
+dataframes = [globals()[name] for name in names]
+with multiprocessing.pool.ThreadPool(len(names)) as pool:
+	_ = pool.starmap(
+		lambda df, path: df.to_csv(path),
+		zip(dataframes, paths_for_cleaned)
+	)
+del pool

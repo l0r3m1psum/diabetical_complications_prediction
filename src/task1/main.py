@@ -354,7 +354,7 @@ assert anagraficapazientiattivi.annodecesso.isna().all()
 anagraficapazientiattivi = anagraficapazientiattivi.drop('annodecesso', axis=1)
 
 percentages = anagraficapazientiattivi.isna().sum()/len(anagraficapazientiattivi)
-mask = (percentages > 0.4) & (percentages.index != 'annodecesso')
+mask = percentages > 0.4
 anagraficapazientiattivi = anagraficapazientiattivi.drop(percentages[mask].index, axis=1)
 del percentages, mask
 

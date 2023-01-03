@@ -49,6 +49,7 @@ sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 def print_all() -> None:
 	for name in names: print(name, globals()[name], sep='\n')
 
+# This are also the cardiovascular events.
 macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
 
 # Initial data cleaning ########################################################
@@ -273,6 +274,52 @@ logging.info(f'After  point 3: {len(prescrizioninondiabete)=}')
 del clean_same_month
 
 # Point 4
+
+# Point 5
+# TODO: log this step.
+
+# Saddly we have to to this step again to make sure that all the patients that
+# were removed from diagnosi in the previous steps are removed also from the
+# other tables.
+anagraficapazientiattivi = diagnosi[['idcentro','idana']] \
+	.join(anagraficapazientiattivi, ['idcentro','idana'], 'inner') \
+	.drop_duplicates(['idcentro','idana']) \
+	.set_index(['idcentro','idana'])
+patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
+diagnosi = diagnosi.merge(patients)
+esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
+esamistrumentali = esamistrumentali.merge(patients)
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
+prescrizioninondiabete = prescrizioninondiabete.merge(patients)
+
+all_events = pandas.concat([
+	diagnosi[['idcentro', 'idana', 'data']],
+	esamilaboratorioparametri[['idcentro', 'idana', 'data']],
+	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data']],
+	esamistrumentali[['idcentro', 'idana', 'data']],
+	prescrizionidiabetefarmaci[['idcentro', 'idana', 'data']],
+	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data']],
+	prescrizioninondiabete[['idcentro', 'idana', 'data']],
+])
+
+# TODO: delete patients with less than two events.
+(all_events.groupby(['idcentro', 'idana'], group_keys=True).count() < 2)
+
+last_event = all_events.join(anagraficapazientiattivi, ['idcentro', 'idana']) \
+	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
+
+assert diagnosi.codiceamd.isin(macro_vascular_diseases).all(), \
+	'diagnosi does not contain only macro vascular diseases'
+
+last_cardiovascular_event = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data.max()
+
+anagraficapazientiattivi = anagraficapazientiattivi.join(
+	(last_cardiovascular_event >= last_event - pandas.tseries.offsets.DateOffset(month=6)).rename('y')
+)
+
+del patients, all_events, last_event, last_cardiovascular_event
 
 # Point 6
 # TODO: remove NA, NaN and NaT from the data and plotting.

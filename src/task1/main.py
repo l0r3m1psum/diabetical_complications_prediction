@@ -278,7 +278,7 @@ del clean_same_month
 # Point 5
 # TODO: log this step.
 
-# Saddly we have to to this step again to make sure that all the patients that
+# Saddly we have to do this step again to make sure that all the patients that
 # were removed from diagnosi in the previous steps are removed also from the
 # other tables.
 anagraficapazientiattivi = diagnosi[['idcentro','idana']] \

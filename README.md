@@ -4,6 +4,17 @@
   * [T-LSTM](https://ieeexplore.ieee.org/document/8767922)
   * [PubMedBERT](https://microsoft.github.io/BLURB/models.html)
 
+# Codici AMD
+Informations about codici AMD can be found here:
+  * [Download](https://aemmedi.it/download/24947/)
+  * [Webpage](https://aemmedi.it/annali-amd/)
+
+# Anatomical Therapeutic Chemical Classification System (ATC codes)
+Information about ATC codes can be found here:
+  * [Wikipedia](https://en.wikipedia.org/wiki/Anatomical_Therapeutic_Chemical_Classification_System)
+  * [Official Website](http://www.whocc.no/)
+  * [Scraped Data](https://github.com/fabkury/atcd/blob/master/WHO%20ATC-DDD%202021-12-03.csv)
+
 # Notes
 If you are using `matplotlib`, on a recent version macOS (e.g. Ventura), from
 the command line, it can report crushes when the window goes in and out of focus

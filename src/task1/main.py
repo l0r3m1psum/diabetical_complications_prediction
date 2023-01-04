@@ -368,6 +368,7 @@ del percentages, mask
 logging.info('Dumping data.')
 dataframes = [globals()[name] for name in names]
 # TODO: fix warnings.
+# NOTE: Maybe we can use piclke to preserve the data types of all dataframes.
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	_ = pool.starmap(
 		lambda df, path: df.to_csv(path),

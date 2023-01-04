@@ -41,30 +41,13 @@ for j in range(len(sets)):
 		print(int(bool(sets[i] & sets[j])), '', end='')
 	print()
 
-# https://github.com/duskybomb/tlstm/blob/master/tlstm.py
-
-n_features = 1
-lstm = torch.nn.LSTM(
-	input_size=n_features+1, # The +1 is the time for the T-LSTM
-	hidden_size=n_features, # TODO: optimize this.
-	num_layers=2, # TODO: optimize this.
-	bias=True,
-	batch_first=True,
-	dropout=0.1,
-	bidirectional=False, # NOTE: Can this be interpreted as looking in the future?
-	proj_size=0 # NOTE: I don't know what this does.
-)
-
-X = torch.Tensor([[0.2, 0.6, 0.7], [1, 2, 3]]).T
-output, (h_n, c_n) = lstm(X.unsqueeze(0))
-
 # LSTM1 \
 # LSTM2 -> Fully connected -> classificazione.
 # LSMT3 /
 
 # diagnosi                           = (data, codiceamd, valore)
-# esamilaboratorioparametri          = (data, codiceamd, valore)
-# esamilaboratorioparametricalcolati = (data, codiceamd, valore, codicestitch)
+# esamilaboratorioparametri          = (data, codiceamd, valore) *
+# esamilaboratorioparametricalcolati = (data, codiceamd, valore, codicestitch) *
 # esamistrumentali                   = (data, codiceamd, valore)
 # prescrizionidiabetefarmaci         = (data, codiceatc, quantita, idpasto, descrizionefarmaco)
 # prescrizionidiabetenonfarmaci      = (data, codiceamd, valore)
@@ -138,6 +121,7 @@ class Model(torch.nn.Module):
 			X_pnondiabete:        torch.Tensor
 		) -> torch.Tensor:
 
+		# NOTE: This step can be parallelized.
 		o_diagnosi,           (h_diagnosi,           c_diagnosi)           = self.lstm_diagnosi(X_diagnosi)
 		o_elabparam,          (h_elabparam,          c_elabparam)          = self.lstm_elabparam(X_elabparam)
 		o_elabparamcalcolati, (h_elabparamcalcolati, c_elabparamcalcolati) = self.lstm_elabparamcalcolati(X_elabparamcalcolati)

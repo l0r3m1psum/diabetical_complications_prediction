@@ -57,6 +57,32 @@ paths_for_cleaned = [f'data/{name}_clean.csv' for name in names]
 
 # Initial data cleaning ########################################################
 
+logging.info('Initial cleaning of AMD data.')
+amd = pandas.read_csv('data/AMD.csv')
+amd = amd.drop_duplicates()
+assert diagnosi.codiceamd.isin(amd.codice).all()
+assert esamilaboratorioparametri.codiceamd.isin(amd.codice).all()
+assert esamilaboratorioparametricalcolati.codiceamd.isin(amd.codice).all()
+assert esamistrumentali.codiceamd.isin(amd.codice).all()
+assert prescrizionidiabetenonfarmaci.codiceamd.isin(amd.codice).all()
+assert prescrizioninondiabete.codiceamd.isin(amd.codice).all()
+# NA can be safelly dropped since there is all codes needed are already there.
+amd = amd.dropna(axis=0, subset='codice')
+amd = amd.set_index('codice')
+assert not (diagnosi.codiceamd == 'AMD243').any()
+assert not (esamilaboratorioparametri.codiceamd == 'AMD243').any()
+assert not (esamilaboratorioparametricalcolati.codiceamd == 'AMD243').any()
+assert not (esamistrumentali.codiceamd == 'AMD243').any()
+assert not (prescrizionidiabetenonfarmaci.codiceamd == 'AMD243').any()
+assert not (prescrizioninondiabete.codiceamd == 'AMD243').any()
+# If you look at this two examples below it is clear that they are both Testo.
+# diagnosi[diagnosi.codiceamd == 'AMD049']
+# prescrizioninondiabete[prescrizioninondiabete.codiceamd == 'AMD121']
+amd['AMD049'] = 'Testo'
+amd['AMD121'] = 'Testo'
+amd = amd.dropna()
+assert (amd.isna().sum() == 0).all(), 'there are still NA'
+
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
 # to use less memory.
 

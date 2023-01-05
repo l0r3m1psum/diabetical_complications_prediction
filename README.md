@@ -13,7 +13,7 @@ Informations about codici AMD can be found here:
 Information about ATC codes can be found here:
   * [Wikipedia](https://en.wikipedia.org/wiki/Anatomical_Therapeutic_Chemical_Classification_System)
   * [Official Website](http://www.whocc.no/)
-  * [Scraped Data](https://github.com/fabkury/atcd/blob/master/WHO%20ATC-DDD%202021-12-03.csv)
+  * [Scraped Data](https://github.com/fabkury/atcd/blob/b426860423e1d0321e042184f2c61afefbaf51d9/WHO%20ATC-DDD%202021-12-03.csv)
 
 # Notes
 If you are using `matplotlib`, on a recent version macOS (e.g. Ventura), from

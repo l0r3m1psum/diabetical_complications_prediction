@@ -126,8 +126,6 @@ del is_not_between
 diagnosi = remove_first_column(diagnosi)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
 diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
-# TODO: understand valore
-# wtf = diagnosi.valore[~diagnosi.valore.apply(is_float)].value_counts()
 
 esamilaboratorioparametri = remove_first_column(esamilaboratorioparametri)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
@@ -145,19 +143,16 @@ esamistrumentali.valore = esamistrumentali.valore.astype('category')
 
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
-# NOTE: A10BD is a probably malformed.
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
 prescrizionidiabetefarmaci.idpasto = prescrizionidiabetefarmaci.idpasto.astype(meal_id.dtype)
 
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
 prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
-# TODO: understand valore
 
 prescrizioninondiabete = remove_first_column(prescrizioninondiabete)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
-# TODO: understand valore, is it categorical?
 
 del remove_first_column
 

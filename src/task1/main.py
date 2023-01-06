@@ -68,7 +68,8 @@ assert prescrizionidiabetenonfarmaci.codiceamd.isin(amd.codice).all()
 assert prescrizioninondiabete.codiceamd.isin(amd.codice).all()
 # NA can be safelly dropped since there is all codes needed are already there.
 amd = amd.dropna(axis=0, subset='codice')
-amd = amd.set_index('codice')
+amd = amd.set_index('codice', verify_integrity=True)
+amd = amd.rename_axis('codiceamd')
 assert not (diagnosi.codiceamd == 'AMD243').any()
 assert not (esamilaboratorioparametri.codiceamd == 'AMD243').any()
 assert not (esamilaboratorioparametricalcolati.codiceamd == 'AMD243').any()
@@ -78,10 +79,9 @@ assert not (prescrizioninondiabete.codiceamd == 'AMD243').any()
 # If you look at this two examples below it is clear that they are both Testo.
 # diagnosi[diagnosi.codiceamd == 'AMD049']
 # prescrizioninondiabete[prescrizioninondiabete.codiceamd == 'AMD121']
-amd['AMD049'] = 'Testo'
-amd['AMD121'] = 'Testo'
+amd.loc['AMD049'] = 'Testo'
+amd.loc['AMD121'] = 'Testo'
 amd = amd.dropna()
-assert (amd.isna().sum() == 0).all(), 'there are still NA'
 
 # TODO: What do we do about this?
 # There are ATC codes not in the main table (of ATC codes).

@@ -85,6 +85,7 @@ assert (amd.isna().sum() == 0).all(), 'there are still NA'
 
 # TODO: What do we do about this?
 # There are ATC codes not in the main table (of ATC codes).
+atc = pandas.read_csv('data/ATC.csv')
 tmp = prescrizionidiabetefarmaci[~prescrizionidiabetefarmaci.codiceatc.isna()]
 tmp[~tmp.codiceatc.isin(atc.atc_code)].codiceatc.unique()
 del tmp

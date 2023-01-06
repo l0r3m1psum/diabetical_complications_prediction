@@ -22,7 +22,39 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 del pool
 
 anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
-anagraficapazientiattivi[~anagraficapazientiattivi.y]
+
+#Point 1
+
+#given a dataset, for patients with positive labels, delete events happened in the last six months
+def clean_last_six_months(df):
+	df = df.merge(positive_patients)
+	df= df.set_index(['idcentro', 'idana'])
+	grouped_df = df.groupby(['idcentro','idana'])
+	filtered_data = []	
+	# Iterate through each patient's group
+	for name, group in grouped_df:
+	# Get the most recent event for this patient
+		max_date = group['data'].max()
+	# Filter the events to only keep those that are more than 6 months from the most recent event
+		filtered_group = group[group['data'] < max_date - pandas.DateOffset(months=6)]
+	# Append the filtered events to the list
+		filtered_data.append(filtered_group)
+	# Concatenate all of the filtered data into a single DataFrame
+	filtered_df = pandas.concat(filtered_data)
+	return filtered_df
+
+#select patients with cardiovascular problems (i.e. y=1)
+positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
+
+clean_last_six_months(diagnosi)
+clean_last_six_months(esamilaboratorioparametri)
+clean_last_six_months(esamilaboratorioparametricalcolati)
+clean_last_six_months(esamistrumentali)
+#are prescrizioni considered events too?
+clean_last_six_months(prescrizionidiabetefarmaci)
+clean_last_six_months(prescrizionidiabetenonfarmaci)
+clean_last_six_months(prescrizioninondiabete)
+
 
 # Most tables have no intersections among their codiceamd. Except for *. This
 # can help find optimal encodings for the AMD codes to give to the LSTMs, since

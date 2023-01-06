@@ -1,4 +1,5 @@
-import torch
+#import torch
+import random
 import pandas
 import matplotlib.pyplot
 import multiprocessing.pool
@@ -22,13 +23,25 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 del pool
 
 anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
+anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita)
+anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazientiattivi.annodiagnosidiabete)
+anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso)
+diagnosi.data = pandas.to_datetime(diagnosi.data)
+esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
+esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
+esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
+prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
+prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
+prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
 
-#Point 1
+
+#TODO PUT DATES TO DATAFRAMES
+####################################### Point 1
 
 #given a dataset, for patients with positive labels, delete events happened in the last six months
 def clean_last_six_months(df):
 	df = df.merge(positive_patients)
-	df= df.set_index(['idcentro', 'idana'])
+	df = df.set_index(['idcentro', 'idana'])
 	grouped_df = df.groupby(['idcentro','idana'])
 	filtered_data = []	
 	# Iterate through each patient's group
@@ -46,15 +59,67 @@ def clean_last_six_months(df):
 #select patients with cardiovascular problems (i.e. y=1)
 positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
 
-clean_last_six_months(diagnosi)
-clean_last_six_months(esamilaboratorioparametri)
-clean_last_six_months(esamilaboratorioparametricalcolati)
-clean_last_six_months(esamistrumentali)
-#are prescrizioni considered events too?
-clean_last_six_months(prescrizionidiabetefarmaci)
-clean_last_six_months(prescrizionidiabetenonfarmaci)
-clean_last_six_months(prescrizioninondiabete)
+logging.info('Starting cleaning last six months of history')
 
+diagnosi = clean_last_six_months(diagnosi)
+esamilaboratorioparametri = clean_last_six_months(esamilaboratorioparametri)
+esamilaboratorioparametricalcolati = clean_last_six_months(esamilaboratorioparametricalcolati)
+esamistrumentali = clean_last_six_months(esamistrumentali)
+prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
+prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
+prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
+
+
+fake_id_count = 1000000
+
+def generate_new_id():
+	global fake_id_count
+	fake_id_count += 1
+	return str(fake_id_count), str(fake_id_count)
+
+
+def copy_patients():
+	anagraficapazientiattivi = globals()['anagraficapazientiattivi'].reset_index() #we will need idana, idcentro
+	new_anagraficapazientiattivi = anagraficapazientiattivi #here we will add the new patients
+	for _, patient in anagraficapazientiattivi.iterrows(): #for each patient
+		if patient['y'] == True: #only active patients #if the label is positive
+			current_idana = patient['idana']
+			current_idcentro = patient['idcentro']
+			new_patient = patient.copy()
+			new_idana, new_idcentro = generate_new_id()
+			new_patient['idana'] = new_idana #assign new code to new patient
+			new_patient['idcentro'] = new_idcentro #assign new code to new patient
+			new_patient['annonascita'] = new_patient['annonascita'] + pandas.DateOffset(days=random.randint(-30, 30)) #creates a disturbed date
+			new_patient['annoprimoaccesso'] = new_patient['annoprimoaccesso'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_patient['annodiagnosidiabete'] = new_patient['annodiagnosidiabete'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_anagraficapazientiattivi.loc[len(new_anagraficapazientiattivi)] = new_patient #add patient to the dataset
+			#create events of the fake patient for the other dataframes
+			for df_name in names:
+				df = globals()[df_name].reset_index()  
+				new_df = df 
+				for _, row_df in df.iterrows():
+					if (row_df['idana'] == current_idana and row_df['idcentro'] == current_idcentro): #only events for current patient
+						r = random.random()
+						if r < 0.3: #with 30% probability leave row as is
+							new_event = row_df.copy()
+							new_event['idana'] = new_idana
+							new_event['idcentro'] = new_idcentro
+							new_df.loc[len(new_df)] = new_event
+						elif r < 0.6: #with 60% probability shuffle the date
+							new_event = row_df.copy()
+							new_event['idana'] = new_idana
+							new_event['idcentro'] = new_idcentro
+							new_event['data'] = new_event['data'] + pandas.DateOffset(days=random.randint(-15, 15))
+							new_df.loc[len(new_df)] = new_event
+						else: #with 10% probability delete (i.e. do not add) the row
+							pass
+				globals()[df_name] = new_df #save the new balanced dataset with new events
+	globals()['anagraficapazientiattivi'] = new_anagraficapazientiattivi #save the new balanced dataset with new patients
+
+logging.info('Starting duplicating patients')
+print("Copy patients")
+copy_patients()
+#######################################
 
 # Most tables have no intersections among their codiceamd. Except for *. This
 # can help find optimal encodings for the AMD codes to give to the LSTMs, since

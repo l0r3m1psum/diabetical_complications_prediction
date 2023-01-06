@@ -83,6 +83,12 @@ amd['AMD121'] = 'Testo'
 amd = amd.dropna()
 assert (amd.isna().sum() == 0).all(), 'there are still NA'
 
+# TODO: what to do about this?
+# There are ATC codes not in the main table (of ATC codes).
+tmp = prescrizionidiabetefarmaci[~prescrizionidiabetefarmaci.codiceatc.isna()]
+tmp[~tmp.codiceatc.isin(atc.atc_code)].codiceatc.unique()
+del tmp
+
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
 # to use less memory.
 

@@ -330,7 +330,7 @@ assert diagnosi.codiceamd.isin(macro_vascular_diseases).all(), \
 last_cardiovascular_event = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data.max()
 
 anagraficapazientiattivi = anagraficapazientiattivi.join(
-	(last_cardiovascular_event >= last_event - pandas.tseries.offsets.DateOffset(month=6)).rename('y')
+	(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 )
 
 del patients, all_events, last_event, last_cardiovascular_event

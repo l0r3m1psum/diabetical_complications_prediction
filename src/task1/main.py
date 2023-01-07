@@ -1,35 +1,9 @@
-import pandas
-import matplotlib.pyplot
-import multiprocessing.pool
-import logging
+import sys
+sys.path.append('src')
 
-logging.basicConfig(format='%(asctime)s %(message)s')
-logging.getLogger().setLevel(logging.INFO)
-
-def is_float(x: any) -> bool:
-	try:
-		_ = float(x)
-	except (ValueError, TypeError):
-		return False
-	return True
-
-def source(fname: str) -> None:
-	with open(fname) as f:
-		exec(f.read())
+from common import *
 
 # Data loading and definition ##################################################
-
-names = [
-	'anagraficapazientiattivi',
-	'diagnosi',
-	'esamilaboratorioparametri',
-	'esamilaboratorioparametricalcolati',
-	'esamistrumentali',
-	'prescrizionidiabetefarmaci',
-	'prescrizionidiabetenonfarmaci',
-	'prescrizioninondiabete',
-]
-paths = [f'data/{name}.csv' for name in names]
 
 logging.info('Loading data.')
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
@@ -42,18 +16,8 @@ sex = pandas.Categorical(['M', 'F'])
 meal_id = pandas.Categorical(i for i in range(1, 7))
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
-# The date in which the dataset was sampled.
-# TODO: find the real one.
-sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
-
-def print_all() -> None:
-	for name in names: print(name, globals()[name], sep='\n')
-
 # This are also the cardiovascular events.
 macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
-
-# Where the cleaned data will be saved.
-paths_for_cleaned = [f'data/{name}_clean.csv' for name in names]
 
 # Initial data cleaning ########################################################
 
@@ -395,11 +359,10 @@ del percentages, mask
 
 logging.info('Dumping data.')
 dataframes = [globals()[name] for name in names]
-# TODO: fix warnings.
-# NOTE: Maybe we can use piclke to preserve the data types of all dataframes.
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	_ = pool.starmap(
-		lambda df, path: df.to_csv(path),
+		# -1 means use the latest protocol for serialization.
+		lambda df, path: df.to_pickle(path, 'infer', -1),
 		zip(dataframes, paths_for_cleaned)
 	)
 del pool

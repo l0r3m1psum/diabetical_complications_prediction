@@ -1,27 +1,13 @@
-import torch
-import pandas
-import matplotlib.pyplot
-import multiprocessing.pool
-import logging
+import sys
+sys.path.append('src')
 
-names = [
-	'anagraficapazientiattivi',
-	'diagnosi',
-	'esamilaboratorioparametri',
-	'esamilaboratorioparametricalcolati',
-	'esamistrumentali',
-	'prescrizionidiabetefarmaci',
-	'prescrizionidiabetenonfarmaci',
-	'prescrizioninondiabete',
-]
-paths_for_cleaned = [f'data/{name}_clean.csv' for name in names]
+from common import *
+import torch
 
 logging.info('Loading data.')
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
-	globals().update(dict(zip(names, pool.map(pandas.read_csv, paths_for_cleaned))))
+	globals().update(dict(zip(names, pool.map(pandas.read_pickle, paths_for_cleaned))))
 del pool
-
-anagraficapazientiattivi = anagraficapazientiattivi.set_index(['idcentro', 'idana'])
 
 #Point 1
 
@@ -30,7 +16,7 @@ def clean_last_six_months(df):
 	df = df.merge(positive_patients)
 	df= df.set_index(['idcentro', 'idana'])
 	grouped_df = df.groupby(['idcentro','idana'])
-	filtered_data = []	
+	filtered_data = []
 	# Iterate through each patient's group
 	for name, group in grouped_df:
 	# Get the most recent event for this patient
@@ -55,23 +41,38 @@ clean_last_six_months(prescrizionidiabetefarmaci)
 clean_last_six_months(prescrizionidiabetenonfarmaci)
 clean_last_six_months(prescrizioninondiabete)
 
+# NOTE: one hot encoding AMD codes could be very large, to improve performance
+# we could do a random projection to a smaller input vector.
+# NOTE: We could add a feature that represents the table from which the data
+# comes from.
 
-# Most tables have no intersections among their codiceamd. Except for *. This
-# can help find optimal encodings for the AMD codes to give to the LSTMs, since
-# we can get away with not using a single encoding for all AMD codes.
-sets = [
-	set(diagnosi.codiceamd),
-	set(esamilaboratorioparametri.codiceamd), # *
-	set(esamilaboratorioparametricalcolati.codiceamd), # *
-	set(esamistrumentali.codiceamd),
-	set(prescrizionidiabetenonfarmaci.codiceamd),
-	set(prescrizioninondiabete.codiceamd),
-]
+# Since the only case in which STITCH codes convey useful information is when
+# the AMD code is NA we the a simple substitution of the NAs with the STITCH
+# codes and remove the column entirely.
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD927'].codicestitch == 'STITCH001').all()
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD013'].codicestitch == 'STITCH002').all()
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD304'].codicestitch == 'STITCH005').all()
+assert esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isnull()].codicestitch.isin(['STITCH003', 'STITCH004']).all()
+esamilaboratorioparametricalcolati.codiceamd.update(
+	esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isnull()].codicestitch
+)
+assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
 
-for j in range(len(sets)):
-	for i in range(len(sets)):
-		print(int(bool(sets[i] & sets[j])), '', end='')
-	print()
+# Now we try to group all the tables in 2 categories the ones with numeric value
+# and the ones with string values.
+num_table = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati])
+obj_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete])
+# TODO: load cleaned AMD data.
+#assert (obj_table.join(amd, 'codiceamd').tipo == 'Testo').all()
+# Woohoo no more work needed!
+
+(sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]')
+
+# TODO: encode dates for LSTM between 0 and 1
+# 1 trovare il paziente più anziano usando sampling_date.
+# 2 stabilire un valore di età oltre il cui la data dell'esame sarà 1.0 (e.g. tutti gli esami fatti dopo 90 anni)
+# 3 a questo punto si possono trasformare tutte le date (per ogni paziente) in un valore tra 0 e 1.
 
 # LSTM1 \
 # LSTM2 -> Fully connected -> classificazione.

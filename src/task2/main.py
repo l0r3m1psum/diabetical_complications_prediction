@@ -52,66 +52,45 @@ prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
 
 # Second step of Point 1
 
-fake_id_count = 1000000
+m = 3
+assert m > 0
+new_idana_start_point = 1000000
 
-def generate_new_id():
-	global fake_id_count
-	fake_id_count += 1
-	return str(fake_id_count), str(fake_id_count)
+# TODO: We have to change idana with a bijection.
+duplicated_positive_patients = pandas.concat([positive_patients]*(m-1), ignore_index=True)
+new_idana = pandas.Series([new_idana_start_point + i for i in range(len(duplicated_positive_patients))])
+duplicated_positive_patients.idana = new_idana
+# new_positive_patients = pandas.concat([positive_patients, duplicated_positive_patients], ignore_index=True)
 
+def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
+	m = 3
+	removed_frac = 0.01
+	random_state = 42
+	# TODO: change id of synthetic patients
+	positive_patients_df = df.merge(positive_patients, 'left', ['idcentro', 'idana'])
+	dup_positive_patients_df = pandas.concat([positive_patients_df]*(m-1), ignore_index=True)
+	dup_positive_patients_df = dup_positive_patients_df.drop(
+		dup_positive_patients_df.sample(None, removed_frac, False).index
+	)
+	offsets = [pandas.Timedelta(i, unit='d') for i in range(-4, 5)]
+	weights = None # TODO gaussian weights.
+	pert = pandas.Series(offsets).sample(len(dup_positive_patients_df), None, True, weights, random_state, ignore_index=True)
+	dup_positive_patients_df.data = dup_positive_patients_df.data + pert
+	res = clean_last_six_months(df)
+	return res
 
-def copy_patients(m=1):
-	anagraficapazientiattivi = globals()['anagraficapazientiattivi'].reset_index() #we will need idana, idcentro
-	new_anagraficapazientiattivi = anagraficapazientiattivi #here we will add the new patients
-	anagraficapazientiattivi = anagraficapazientiattivi[anagraficapazientiattivi.y == True]
-	all_but_anagrafica = names[:] #list of all dataframes but anagraficapazientiattivi
-	all_but_anagrafica.remove("anagraficapazientiattivi")
+# TODO: add new patients to anagraficapazientiattivi
+diagnosi = pandas.concat([diagnosi, naive_balancing(diagnosi)], ignore_index=True)
+esamilaboratorioparametri = pandas.concat([esamilaboratorioparametri, naive_balancing(esamilaboratorioparametri)], ignore_index=True)
+esamilaboratorioparametricalcolati = pandas.concat([esamilaboratorioparametricalcolati, naive_balancing(esamilaboratorioparametricalcolati)], ignore_index=True)
+esamistrumentali = pandas.concat([esamistrumentali, naive_balancing(esamistrumentali)], ignore_index=True)
+prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_balancing(prescrizionidiabetefarmaci)], ignore_index=True)
+prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
+prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
 
-	count = 0
-	for _, patient in anagraficapazientiattivi.iterrows(): #for each patient
-		count += 1
-		print(count)
-		current_idana = patient['idana']
-		current_idcentro = patient['idcentro']
-		new_patient = patient.copy()
-		for _ in range(m): #m are the number of copies we want to make
-			new_idana, new_idcentro = generate_new_id()
-			new_patient['idana'] = new_idana #assign new code to new patient
-			new_patient['idcentro'] = new_idcentro #assign new code to new patient
-			new_patient['annonascita'] = new_patient['annonascita'] + pandas.DateOffset(days=random.randint(-30, 30)) #creates a disturbed date
-			new_patient['annoprimoaccesso'] = new_patient['annoprimoaccesso'] + pandas.DateOffset(days=random.randint(-30, 30))
-			new_patient['annodiagnosidiabete'] = new_patient['annodiagnosidiabete'] + pandas.DateOffset(days=random.randint(-30, 30))
-			new_anagraficapazientiattivi.loc[len(new_anagraficapazientiattivi)] = new_patient #add patient to the dataset
-			#create events of the fake patient for the other dataframes
-			for df_name in all_but_anagrafica:
-				df = globals()[df_name]
-				df = df.reset_index()
-				new_df = df
-				df = df[(df.idana == current_idana) & (df.idcentro == current_idcentro)]
-				for _, row_df in df.iterrows():
-					r = random.random()
-					if r < 0.3: #with 30% probability leave row as is
-						new_event = row_df.copy()
-						new_event['idana'] = new_idana
-						new_event['idcentro'] = new_idcentro
-						new_df.loc[len(new_df)] = new_event
-					elif r < 0.6: #with 60% probability shuffle the date
-						new_event = row_df.copy()
-						new_event['idana'] = new_idana
-						new_event['idcentro'] = new_idcentro
-						new_event['data'] = new_event['data'] + pandas.DateOffset(days=random.randint(-15, 15))
-						new_df.loc[len(new_df)] = new_event
-					else: #with 10% probability delete (i.e. do not add) the row
-						pass
-				new_df = new_df.set_index(['idcentro', 'idana'])
-				globals()[df_name] = new_df #save the new balanced dataset with new events
+# TODO: for **concentration** rebalancig perturbate anagraficapazientiattivi too and the values of the events.
 
-	globals()['anagraficapazientiattivi'] = new_anagraficapazientiattivi #save the new balanced dataset with new patients
-
-logging.info('Starting duplicating patients')
-
-#copy_patients()
-#######################################
+################################################################################
 
 raise SystemExit(0)
 

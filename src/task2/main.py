@@ -1,5 +1,6 @@
 import sys
 sys.path.append('src')
+import random
 
 from common import *
 import torch
@@ -9,12 +10,12 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_pickle, paths_for_cleaned))))
 del pool
 
-#Point 1
+####################################### Point 1
 
 #given a dataset, for patients with positive labels, delete events happened in the last six months
 def clean_last_six_months(df):
 	df = df.merge(positive_patients)
-	df= df.set_index(['idcentro', 'idana'])
+	df = df.set_index(['idcentro', 'idana']) # NOTE: I don't think that this is necessary, and it is better to remove it because it break code below.
 	grouped_df = df.groupby(['idcentro','idana'])
 	filtered_data = []
 	# Iterate through each patient's group
@@ -32,14 +33,79 @@ def clean_last_six_months(df):
 #select patients with cardiovascular problems (i.e. y=1)
 positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
 
-clean_last_six_months(diagnosi)
-clean_last_six_months(esamilaboratorioparametri)
-clean_last_six_months(esamilaboratorioparametricalcolati)
-clean_last_six_months(esamistrumentali)
-#are prescrizioni considered events too?
-clean_last_six_months(prescrizionidiabetefarmaci)
-clean_last_six_months(prescrizionidiabetenonfarmaci)
-clean_last_six_months(prescrizioninondiabete)
+logging.info('Starting cleaning last six months of history')
+
+diagnosi = clean_last_six_months(diagnosi)
+esamilaboratorioparametri = clean_last_six_months(esamilaboratorioparametri)
+esamilaboratorioparametricalcolati = clean_last_six_months(esamilaboratorioparametricalcolati)
+esamistrumentali = clean_last_six_months(esamistrumentali)
+prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
+prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
+prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
+
+
+fake_id_count = 1000000
+
+def generate_new_id():
+	global fake_id_count
+	fake_id_count += 1
+	return str(fake_id_count), str(fake_id_count)
+
+
+def copy_patients(m=1):
+	anagraficapazientiattivi = globals()['anagraficapazientiattivi'].reset_index() #we will need idana, idcentro
+	new_anagraficapazientiattivi = anagraficapazientiattivi #here we will add the new patients
+	anagraficapazientiattivi = anagraficapazientiattivi[anagraficapazientiattivi.y == True]
+	all_but_anagrafica = names #list of all dataframes but anagraficapazientiattivi
+	all_but_anagrafica.remove("anagraficapazientiattivi")
+
+	count = 0
+	for _, patient in anagraficapazientiattivi.iterrows(): #for each patient
+		count += 1
+		print(count)
+		current_idana = patient['idana']
+		current_idcentro = patient['idcentro']
+		new_patient = patient.copy()
+		for _ in range(m): #m are the number of copies we want to make
+			new_idana, new_idcentro = generate_new_id()
+			new_patient['idana'] = new_idana #assign new code to new patient
+			new_patient['idcentro'] = new_idcentro #assign new code to new patient
+			new_patient['annonascita'] = new_patient['annonascita'] + pandas.DateOffset(days=random.randint(-30, 30)) #creates a disturbed date
+			new_patient['annoprimoaccesso'] = new_patient['annoprimoaccesso'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_patient['annodiagnosidiabete'] = new_patient['annodiagnosidiabete'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_anagraficapazientiattivi.loc[len(new_anagraficapazientiattivi)] = new_patient #add patient to the dataset
+			#create events of the fake patient for the other dataframes
+			for df_name in all_but_anagrafica:
+				df = globals()[df_name]
+				df = df.reset_index()
+				new_df = df
+				df = df[(df.idana == current_idana) & (df.idcentro == current_idcentro)]
+				for _, row_df in df.iterrows():
+					r = random.random()
+					if r < 0.3: #with 30% probability leave row as is
+						new_event = row_df.copy()
+						new_event['idana'] = new_idana
+						new_event['idcentro'] = new_idcentro
+						new_df.loc[len(new_df)] = new_event
+					elif r < 0.6: #with 60% probability shuffle the date
+						new_event = row_df.copy()
+						new_event['idana'] = new_idana
+						new_event['idcentro'] = new_idcentro
+						new_event['data'] = new_event['data'] + pandas.DateOffset(days=random.randint(-15, 15))
+						new_df.loc[len(new_df)] = new_event
+					else: #with 10% probability delete (i.e. do not add) the row
+						pass
+				new_df = new_df.set_index(['idcentro', 'idana'])
+				globals()[df_name] = new_df #save the new balanced dataset with new events
+
+	globals()['anagraficapazientiattivi'] = new_anagraficapazientiattivi #save the new balanced dataset with new patients
+
+logging.info('Starting duplicating patients')
+
+#copy_patients()
+#######################################
+
+raise SystemExit(0)
 
 # NOTE: one hot encoding AMD codes could be very large, to improve performance
 # we could do a random projection to a smaller input vector.

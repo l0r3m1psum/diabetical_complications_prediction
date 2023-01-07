@@ -90,7 +90,7 @@ prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(
 
 # TODO: for **concentration** rebalancig perturbate anagraficapazientiattivi too and the values of the events.
 
-################################################################################
+# Deep Learning Stuff ##########################################################
 
 # NOTE: one hot encoding AMD codes could be very large, to improve performance
 # we could do a random projection to a smaller input vector.
@@ -112,15 +112,28 @@ esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('co
 
 # Now we try to group all the tables in 2 categories the ones with numeric value
 # and the ones with string values.
-num_table = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati])
-obj_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete])
+num_table = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati], ignore_index=True)
+obj_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
 # TODO: load cleaned AMD data.
 #assert (obj_table.join(amd, 'codiceamd').tipo == 'Testo').all()
 # Woohoo no more work needed!
 
-(sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]')
+# The histogram clearly shows that the majority of patients are old.
+# ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
 
-# TODO: encode dates for LSTM between 0 and 1
+# To give the models an easier time understanding the date in which the event
+# happened we scale it wrt how old the patient is. Any age above 100 years is
+# considered to be the same as 100.
+def add_seniority_level(df: pandas.DataFrame) -> None:
+	tmp = diagnosi.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
+	seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
+	df['seniority'] = seniority
+
+add_seniority_level(num_table)
+add_seniority_level(obj_table)
+
+del add_seniority_level
+
 # 1 trovare il paziente più anziano usando sampling_date.
 # 2 stabilire un valore di età oltre il cui la data dell'esame sarà 1.0 (e.g. tutti gli esami fatti dopo 90 anni)
 # 3 a questo punto si possono trasformare tutte le date (per ogni paziente) in un valore tra 0 e 1.

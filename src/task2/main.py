@@ -92,12 +92,13 @@ prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(
 
 ################################################################################
 
-raise SystemExit(0)
-
 # NOTE: one hot encoding AMD codes could be very large, to improve performance
 # we could do a random projection to a smaller input vector.
 # NOTE: We could add a feature that represents the table from which the data
 # comes from.
+
+raise SystemExit(0)
+# TODO: stop using categoricals since they are mostly useless and break the code below.
 
 # Since the only case in which STITCH codes convey useful information is when
 # the AMD code is NA we the a simple substitution of the NAs with the STITCH

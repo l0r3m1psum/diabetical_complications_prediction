@@ -12,37 +12,45 @@ del pool
 
 ####################################### Point 1
 
-#given a dataset, for patients with positive labels, delete events happened in the last six months
-def clean_last_six_months(df):
-	df = df.merge(positive_patients)
-	df = df.set_index(['idcentro', 'idana']) # NOTE: I don't think that this is necessary, and it is better to remove it because it break code below.
-	grouped_df = df.groupby(['idcentro','idana'])
-	filtered_data = []
-	# Iterate through each patient's group
-	for name, group in grouped_df:
-	# Get the most recent event for this patient
-		max_date = group['data'].max()
-	# Filter the events to only keep those that are more than 6 months from the most recent event
-		filtered_group = group[group['data'] < max_date - pandas.DateOffset(months=6)]
-	# Append the filtered events to the list
-		filtered_data.append(filtered_group)
-	# Concatenate all of the filtered data into a single DataFrame
-	filtered_df = pandas.concat(filtered_data)
-	return filtered_df
-
 #select patients with cardiovascular problems (i.e. y=1)
 positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
+
+all_events = pandas.concat([
+	diagnosi[['idcentro', 'idana', 'data']],
+	esamilaboratorioparametri[['idcentro', 'idana', 'data']],
+	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data']],
+	esamistrumentali[['idcentro', 'idana', 'data']],
+	prescrizionidiabetefarmaci[['idcentro', 'idana', 'data']],
+	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data']],
+	prescrizioninondiabete[['idcentro', 'idana', 'data']],
+])
+
+last_event = all_events.groupby(['idcentro', 'idana'], group_keys=True).data.max()
+last_event_positive_patients = positive_patients.join(last_event, ['idcentro', 'idana'])
+
+#given a dataset, for patients with positive labels, delete events happened in the last six months
+def clean_last_six_months(df: pandas.DataFrame) -> pandas.DataFrame:
+	df_with_last_event_for_positive_patients = df.merge(last_event_positive_patients, 'left', ['idcentro', 'idana'])
+	# Here NaT do exactly what we need.
+	mask = df_with_last_event_for_positive_patients.data_x > df_with_last_event_for_positive_patients.data_y - pandas.DateOffset(months=6)
+	res = df.drop(mask[mask].index)
+	return res
 
 logging.info('Starting cleaning last six months of history')
 
 diagnosi = clean_last_six_months(diagnosi)
+logging.info(f'{len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = clean_last_six_months(esamilaboratorioparametri)
+logging.info(f'{len(esamilaboratorioparametri)=}')
 esamilaboratorioparametricalcolati = clean_last_six_months(esamilaboratorioparametricalcolati)
 esamistrumentali = clean_last_six_months(esamistrumentali)
 prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
 prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
 prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
 
+# del positive_patients, all_events, last_event, last_event_positive_patients, clean_last_six_months
+
+# Second step of Point 1
 
 fake_id_count = 1000000
 
@@ -56,7 +64,7 @@ def copy_patients(m=1):
 	anagraficapazientiattivi = globals()['anagraficapazientiattivi'].reset_index() #we will need idana, idcentro
 	new_anagraficapazientiattivi = anagraficapazientiattivi #here we will add the new patients
 	anagraficapazientiattivi = anagraficapazientiattivi[anagraficapazientiattivi.y == True]
-	all_but_anagrafica = names #list of all dataframes but anagraficapazientiattivi
+	all_but_anagrafica = names[:] #list of all dataframes but anagraficapazientiattivi
 	all_but_anagrafica.remove("anagraficapazientiattivi")
 
 	count = 0

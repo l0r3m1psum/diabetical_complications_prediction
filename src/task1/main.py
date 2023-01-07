@@ -10,14 +10,14 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_csv, paths))))
 del pool
 
-codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
-codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
-sex = pandas.Categorical(['M', 'F'])
-meal_id = pandas.Categorical(i for i in range(1, 7))
+# codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
+# codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
+# sex = pandas.Categorical(['M', 'F'])
+# meal_id = pandas.Categorical(i for i in range(1, 7))
 # NOTE: should I create a sepatate Categorical for codiceatc too?
 
 # This are also the cardiovascular events.
-macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
+# macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
 
 # Initial data cleaning ########################################################
 
@@ -46,6 +46,7 @@ assert not (prescrizioninondiabete.codiceamd == 'AMD243').any()
 amd.loc['AMD049'] = 'Testo'
 amd.loc['AMD121'] = 'Testo'
 amd = amd.dropna()
+amd.to_pickle('data/AMD_clean.pickle.zip', 'infer', -1)
 
 # TODO: What do we do about this?
 # There are ATC codes not in the main table (of ATC codes).
@@ -69,7 +70,6 @@ anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazi
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
-anagraficapazientiattivi.sesso = anagraficapazientiattivi.sesso.astype(sex.dtype)
 # NOTE: this can probabbly be dropped since they are all equal to 5
 anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
 anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
@@ -96,34 +96,26 @@ del is_not_between
 
 diagnosi = remove_first_column(diagnosi)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
-diagnosi.codiceamd = diagnosi.codiceamd.astype(codice_amd.dtype)
 
 esamilaboratorioparametri = remove_first_column(esamilaboratorioparametri)
 esamilaboratorioparametri.data = pandas.to_datetime(esamilaboratorioparametri.data)
-esamilaboratorioparametri.codiceamd = esamilaboratorioparametri.codiceamd.astype(codice_amd.dtype)
 
 esamilaboratorioparametricalcolati = remove_first_column(esamilaboratorioparametricalcolati)
 esamilaboratorioparametricalcolati.data = pandas.to_datetime(esamilaboratorioparametricalcolati.data)
-esamilaboratorioparametricalcolati.codiceamd = esamilaboratorioparametricalcolati.codiceamd.astype(codice_amd.dtype)
-esamilaboratorioparametricalcolati.codicestitch = esamilaboratorioparametricalcolati.codicestitch.astype(codice_stitch.dtype)
 
 esamistrumentali = remove_first_column(esamistrumentali)
 esamistrumentali.data = pandas.to_datetime(esamistrumentali.data)
-esamistrumentali.codiceamd = esamistrumentali.codiceamd.astype(codice_amd.dtype)
 esamistrumentali.valore = esamistrumentali.valore.astype('category')
 
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
 prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
-prescrizionidiabetefarmaci.idpasto = prescrizionidiabetefarmaci.idpasto.astype(meal_id.dtype)
 
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
-prescrizionidiabetenonfarmaci.codiceamd = prescrizionidiabetenonfarmaci.codiceamd.astype(codice_amd.dtype)
 
 prescrizioninondiabete = remove_first_column(prescrizioninondiabete)
 prescrizioninondiabete.data = pandas.to_datetime(prescrizioninondiabete.data)
-prescrizioninondiabete.codiceamd = prescrizioninondiabete.codiceamd.astype(codice_amd.dtype)
 
 del remove_first_column
 

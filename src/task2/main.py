@@ -97,9 +97,6 @@ prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(
 # NOTE: We could add a feature that represents the table from which the data
 # comes from.
 
-raise SystemExit(0)
-# TODO: stop using categoricals since they are mostly useless and break the code below.
-
 # Since the only case in which STITCH codes convey useful information is when
 # the AMD code is NA we the a simple substitution of the NAs with the STITCH
 # codes and remove the column entirely.

@@ -35,6 +35,9 @@ paths_for_cleaned = [f'data/{name}_clean.pickle.zip' for name in names]
 # TODO: find the real one.
 sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 
+# This are also the cardiovascular events.
+macro_vascular_diseases = ['AMD047', 'AMD048', 'AMD049', 'AMD071', 'AMD081', 'AMD082', 'AMD208', 'AMD303']
+
 # TODO: this should take an optional argument (e.g. a lambda) to select what to
 # print from all the data frames.
 def print_all() -> None:

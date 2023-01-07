@@ -1,4 +1,4 @@
-#import torch
+import torch
 import random
 import pandas
 import matplotlib.pyplot
@@ -81,51 +81,54 @@ def generate_new_id():
 def copy_patients(m=1):
 	anagraficapazientiattivi = globals()['anagraficapazientiattivi'].reset_index() #we will need idana, idcentro
 	new_anagraficapazientiattivi = anagraficapazientiattivi #here we will add the new patients
+	anagraficapazientiattivi = anagraficapazientiattivi[anagraficapazientiattivi.y == True]
 	all_but_anagrafica = names #list of all dataframes but anagraficapazientiattivi
 	all_but_anagrafica.remove("anagraficapazientiattivi")
 
+	count = 0
 	for _, patient in anagraficapazientiattivi.iterrows(): #for each patient
-		if patient['y'] == True: #only active patients #if the label is positive
-			current_idana = patient['idana']
-			current_idcentro = patient['idcentro']
-			new_patient = patient.copy()
-			for _ in range(m): #m are the number of copies we want to make
-				new_idana, new_idcentro = generate_new_id()
-				new_patient['idana'] = new_idana #assign new code to new patient
-				new_patient['idcentro'] = new_idcentro #assign new code to new patient
-				new_patient['annonascita'] = new_patient['annonascita'] + pandas.DateOffset(days=random.randint(-30, 30)) #creates a disturbed date
-				new_patient['annoprimoaccesso'] = new_patient['annoprimoaccesso'] + pandas.DateOffset(days=random.randint(-30, 30))
-				new_patient['annodiagnosidiabete'] = new_patient['annodiagnosidiabete'] + pandas.DateOffset(days=random.randint(-30, 30))
-				new_anagraficapazientiattivi.loc[len(new_anagraficapazientiattivi)] = new_patient #add patient to the dataset
-				#create events of the fake patient for the other dataframes
-				for df_name in all_but_anagrafica:
-					df = globals()[df_name]
-					df = df.reset_index()  
-					new_df = df 
-					for _, row_df in df.iterrows():
-						if (row_df['idana'] == current_idana and row_df['idcentro'] == current_idcentro): #only events for current patient
-							r = random.random()
-							if r < 0.3: #with 30% probability leave row as is
-								new_event = row_df.copy()
-								new_event['idana'] = new_idana
-								new_event['idcentro'] = new_idcentro
-								new_df.loc[len(new_df)] = new_event
-							elif r < 0.6: #with 60% probability shuffle the date
-								new_event = row_df.copy()
-								new_event['idana'] = new_idana
-								new_event['idcentro'] = new_idcentro
-								new_event['data'] = new_event['data'] + pandas.DateOffset(days=random.randint(-15, 15))
-								new_df.loc[len(new_df)] = new_event
-							else: #with 10% probability delete (i.e. do not add) the row
-								pass
-					new_df = new_df.set_index(['idcentro', 'idana'])
-					globals()[df_name] = new_df #save the new balanced dataset with new events
+		count += 1
+		print(count)
+		current_idana = patient['idana']
+		current_idcentro = patient['idcentro']
+		new_patient = patient.copy()
+		for _ in range(m): #m are the number of copies we want to make
+			new_idana, new_idcentro = generate_new_id()
+			new_patient['idana'] = new_idana #assign new code to new patient
+			new_patient['idcentro'] = new_idcentro #assign new code to new patient
+			new_patient['annonascita'] = new_patient['annonascita'] + pandas.DateOffset(days=random.randint(-30, 30)) #creates a disturbed date
+			new_patient['annoprimoaccesso'] = new_patient['annoprimoaccesso'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_patient['annodiagnosidiabete'] = new_patient['annodiagnosidiabete'] + pandas.DateOffset(days=random.randint(-30, 30))
+			new_anagraficapazientiattivi.loc[len(new_anagraficapazientiattivi)] = new_patient #add patient to the dataset
+			#create events of the fake patient for the other dataframes
+			for df_name in all_but_anagrafica:
+				df = globals()[df_name]
+				df = df.reset_index()  
+				new_df = df 
+				df = df[(df.idana == current_idana) & (df.idcentro == current_idcentro)]
+				for _, row_df in df.iterrows():
+					r = random.random()
+					if r < 0.3: #with 30% probability leave row as is
+						new_event = row_df.copy()
+						new_event['idana'] = new_idana
+						new_event['idcentro'] = new_idcentro
+						new_df.loc[len(new_df)] = new_event
+					elif r < 0.6: #with 60% probability shuffle the date
+						new_event = row_df.copy()
+						new_event['idana'] = new_idana
+						new_event['idcentro'] = new_idcentro
+						new_event['data'] = new_event['data'] + pandas.DateOffset(days=random.randint(-15, 15))
+						new_df.loc[len(new_df)] = new_event
+					else: #with 10% probability delete (i.e. do not add) the row
+						pass
+				new_df = new_df.set_index(['idcentro', 'idana'])
+				globals()[df_name] = new_df #save the new balanced dataset with new events
 
 	globals()['anagraficapazientiattivi'] = new_anagraficapazientiattivi #save the new balanced dataset with new patients
 
 logging.info('Starting duplicating patients')
 
-copy_patients()
+#copy_patients()
 #######################################
 
 # Most tables have no intersections among their codiceamd. Except for *. This

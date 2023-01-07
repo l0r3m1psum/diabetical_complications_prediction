@@ -38,5 +38,8 @@ sampling_date = pandas.Timestamp(year=2022, month=1, day=1)
 # TODO: this should take an optional argument (e.g. a lambda) to select what to
 # print from all the data frames.
 def print_all() -> None:
-	# FIXME: globals() is evalueted in this module and not in the calling one.
-	for name in names: print(name, globals()[name], sep='\n')
+	# Evil hack since globals() is bound to the globals in this module and not
+	# the calling one.
+	import inspect
+	called_from = inspect.stack()[1]
+	for name in names: print(name, called_from.frame.f_globals[name], sep='\n')

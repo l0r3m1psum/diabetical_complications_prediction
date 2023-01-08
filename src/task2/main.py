@@ -83,11 +83,12 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	assert len(copied_positive_patients_df) == (m-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
 	copied_positive_patients_df = copied_positive_patients_df.drop(
 		copied_positive_patients_df.sample(None, removed_frac, False).index
-	).reset_index()
+	).reset_index(drop=True)
 	offsets = rng.normal(0, 3, len(copied_positive_patients_df)).astype('int')
 	pert = pandas.to_timedelta(offsets, unit='d')
 	copied_positive_patients_df.data = copied_positive_patients_df.data + pert
-	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df)
+	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df).reset_index(drop=True)
+	assert copied_positive_patients_df.idana.isin(idana_conv.idana).all()
 	copied_positive_patients_df.idana = copied_positive_patients_df.merge(idana_conv).new
 	return copied_positive_patients_df
 
@@ -147,6 +148,8 @@ add_seniority_level(num_table)
 add_seniority_level(txt_table)
 
 del add_seniority_level
+
+
 
 class Model(torch.nn.Module):
 

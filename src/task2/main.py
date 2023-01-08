@@ -57,7 +57,9 @@ seed = 42
 # NOTE: saddly just a bijection between new and old idana is not enough because
 # each new group of duplicated patiens needs a bijection between new and old
 # idana. Because otherwise if we duplicate the data n times there are going to
-# be n copies of the patients with the new idana.
+# be n copies of the patients with the new idana. A possible solution could be
+# to add a new row containing a unique number for each duplicated block and
+# create a bijection based on idana and this row.
 copied_positive_patients = pandas.concat([positive_patients]*(m-1), ignore_index=True)
 idana = positive_patients.idana.unique()
 idana_conv = pandas.DataFrame({ # The bijection.

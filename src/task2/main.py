@@ -10,9 +10,8 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_pickle, paths_for_cleaned))))
 del pool
 
-####################################### Point 1
+# Point 1
 
-#select patients with cardiovascular problems (i.e. y=1)
 positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
 
 all_events = pandas.concat([
@@ -24,13 +23,13 @@ all_events = pandas.concat([
 	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data']],
 	prescrizioninondiabete[['idcentro', 'idana', 'data']],
 ])
-
 last_event = all_events.groupby(['idcentro', 'idana'], group_keys=True).data.max()
 last_event_positive_patients = positive_patients.join(last_event, ['idcentro', 'idana'])
 
 #given a dataset, for patients with positive labels, delete events happened in the last six months
 def clean_last_six_months(df: pandas.DataFrame) -> pandas.DataFrame:
 	df_with_last_event_for_positive_patients = df.merge(last_event_positive_patients, 'left', ['idcentro', 'idana'])
+	assert (df_with_last_event_for_positive_patients.index == df.index).all()
 	# Here NaT do exactly what we need.
 	mask = df_with_last_event_for_positive_patients.data_x > df_with_last_event_for_positive_patients.data_y - pandas.DateOffset(months=6)
 	res = df.drop(mask[mask].index)
@@ -48,36 +47,49 @@ prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
 prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
 prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
 
-# del positive_patients, all_events, last_event, last_event_positive_patients, clean_last_six_months
-
-# Second step of Point 1
+del all_events, last_event
 
 m = 3
 assert m > 0
 new_idana_start_point = 1000000
+seed = 42
 
-# TODO: We have to change idana with a bijection.
-duplicated_positive_patients = pandas.concat([positive_patients]*(m-1), ignore_index=True)
-new_idana = pandas.Series([new_idana_start_point + i for i in range(len(duplicated_positive_patients))])
-duplicated_positive_patients.idana = new_idana
-# new_positive_patients = pandas.concat([positive_patients, duplicated_positive_patients], ignore_index=True)
+# NOTE: saddly just a bijection between new and old idana is not enough because
+# each new group of duplicated patiens needs a bijection between new and old
+# idana. Because otherwise if we duplicate the data n times there are going to
+# be n copies of the patients with the new idana.
+copied_positive_patients = pandas.concat([positive_patients]*(m-1), ignore_index=True)
+idana = positive_patients.idana.unique()
+idana_conv = pandas.DataFrame({ # The bijection.
+	'idana': idana,
+	'new': pandas.Series([new_idana_start_point + i for i in range(len(idana))])
+})
+del idana
+
+import numpy
+
+rng = numpy.random.default_rng(seed)
 
 def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
-	m = 3
+	"""This function does 5 things:
+	  1. duplicates the events for the positive patients in this dataframe
+	  2. removes some of this events
+	  3. perturbates the date of thi events
+	  6. cleans the last six months
+	  4. update the idana
+	"""
 	removed_frac = 0.01
-	random_state = 42
-	# TODO: change id of synthetic patients
-	positive_patients_df = df.merge(positive_patients, 'left', ['idcentro', 'idana'])
-	dup_positive_patients_df = pandas.concat([positive_patients_df]*(m-1), ignore_index=True)
-	dup_positive_patients_df = dup_positive_patients_df.drop(
-		dup_positive_patients_df.sample(None, removed_frac, False).index
-	)
-	offsets = [pandas.Timedelta(i, unit='d') for i in range(-4, 5)]
-	weights = None # TODO gaussian weights.
-	pert = pandas.Series(offsets).sample(len(dup_positive_patients_df), None, True, weights, random_state, ignore_index=True)
-	dup_positive_patients_df.data = dup_positive_patients_df.data + pert
-	res = clean_last_six_months(df)
-	return res
+	copied_positive_patients_df = df.merge(copied_positive_patients, 'inner', ['idcentro', 'idana'])
+	assert len(copied_positive_patients_df) == (m-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
+	copied_positive_patients_df = copied_positive_patients_df.drop(
+		copied_positive_patients_df.sample(None, removed_frac, False).index
+	).reset_index()
+	offsets = rng.normal(0, 3, len(copied_positive_patients_df)).astype('int')
+	pert = pandas.to_timedelta(offsets, unit='d')
+	copied_positive_patients_df.data = copied_positive_patients_df.data + pert
+	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df)
+	copied_positive_patients_df.idana = copied_positive_patients_df.merge(idana_conv).new
+	return copied_positive_patients_df
 
 # TODO: add new patients to anagraficapazientiattivi
 diagnosi = pandas.concat([diagnosi, naive_balancing(diagnosi)], ignore_index=True)
@@ -87,6 +99,8 @@ esamistrumentali = pandas.concat([esamistrumentali, naive_balancing(esamistrumen
 prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_balancing(prescrizionidiabetefarmaci)], ignore_index=True)
 prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
 prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
+
+# Point 2
 
 # TODO: for **concentration** rebalancig perturbate anagraficapazientiattivi too and the values of the events.
 

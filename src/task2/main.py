@@ -127,9 +127,9 @@ esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('co
 # Now we try to group all the tables in 2 categories the ones with numeric value
 # and the ones with string values.
 num_table = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati], ignore_index=True)
-obj_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
+txt_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
 # TODO: load cleaned AMD data.
-#assert (obj_table.join(amd, 'codiceamd').tipo == 'Testo').all()
+#assert (txt_table.join(amd, 'codiceamd').tipo == 'Testo').all()
 # Woohoo no more work needed!
 
 # The histogram clearly shows that the majority of patients are old.
@@ -144,48 +144,19 @@ def add_seniority_level(df: pandas.DataFrame) -> None:
 	df['seniority'] = seniority
 
 add_seniority_level(num_table)
-add_seniority_level(obj_table)
+add_seniority_level(txt_table)
 
 del add_seniority_level
 
-# 1 trovare il paziente più anziano usando sampling_date.
-# 2 stabilire un valore di età oltre il cui la data dell'esame sarà 1.0 (e.g. tutti gli esami fatti dopo 90 anni)
-# 3 a questo punto si possono trasformare tutte le date (per ogni paziente) in un valore tra 0 e 1.
-
-# LSTM1 \
-# LSTM2 -> Fully connected -> classificazione.
-# LSMT3 /
-
-# diagnosi                           = (data, codiceamd, valore)
-# esamilaboratorioparametri          = (data, codiceamd, valore) *
-# esamilaboratorioparametricalcolati = (data, codiceamd, valore, codicestitch) *
-# esamistrumentali                   = (data, codiceamd, valore)
-# prescrizionidiabetefarmaci         = (data, codiceatc, quantita, idpasto, descrizionefarmaco)
-# prescrizionidiabetenonfarmaci      = (data, codiceamd, valore)
-# prescrizioninondiabete             = (data, codiceamd, valore)
-
 class Model(torch.nn.Module):
-	"""In this class the names are shortened as such for readability:
-	  * e = esami
-	  * p = prescrizioni
-	  * labparam = laboratorioparametri
-	"""
+
 	def __init__(
 			self,
-			diagnosi_input_size: int,
-			diagnosi_hidden_size: int,
-			elabparam_input_size: int,
-			elabparam_hidden_size: int,
-			elabparamcalcolati_input_size: int,
-			elabparamcalcolati_hidden_size: int,
-			estrumentali_input_size: int,
-			estrumentali_hidden_size: int,
-			pdiabetefarmaci_input_size: int,
-			pdiabetefarmaci_hidden_size: int,
-			pdiabetenonfarmaci_input_size: int,
-			pdiabetenonfarmaci_hidden_size: int,
-			pnondiabete_input_size: int,
-			pnondiabete_hidden_size: int,
+			num_input_size: int,
+			num_hidden_size: int,
+			txt_input_size: int,
+			txt_hidden_size: int,
+			# Common arguments to all LSTMs.
 			num_layers: int,
 			bias: bool,
 			batch_first: bool,
@@ -204,66 +175,34 @@ class Model(torch.nn.Module):
 			'proj_size':     proj_size,
 		}
 
-		self.lstm_diagnosi           = torch.nn.LSTM(diagnosi_input_size, diagnosi_hidden_size, **common_args)
-		self.lstm_elabparam          = torch.nn.LSTM(elabparam_input_size, elabparam_hidden_size, **common_args)
-		self.lstm_elabparamcalcolati = torch.nn.LSTM(elabparamcalcolati_input_size, elabparamcalcolati_hidden_size, **common_args)
-		self.lstm_estrumentali       = torch.nn.LSTM(estrumentali_input_size, estrumentali_hidden_size, **common_args)
-		self.lstm_pdiabetefarmaci    = torch.nn.LSTM(pdiabetefarmaci_input_size, pdiabetefarmaci_hidden_size, **common_args)
-		self.lstm_pdiabetenonfarmaci = torch.nn.LSTM(pdiabetenonfarmaci_input_size, pdiabetenonfarmaci_hidden_size, **common_args)
-		self.lstm_pnondiabete        = torch.nn.LSTM(pnondiabete_input_size, pnondiabete_hidden_size, **common_args)
+		self.lstm_num = torch.nn.LSTM(num_input_size, num_hidden_size, **common_args)
+		self.lstm_txt = torch.nn.LSTM(txt_input_size, txt_hidden_size, **common_args)
 
-		classifier_input_size = (diagnosi_hidden_size + elabparam_hidden_size
-			+ elabparamcalcolati_hidden_size + estrumentali_hidden_size
-			+ pdiabetefarmaci_hidden_size + pdiabetenonfarmaci_hidden_size
-			+ pnondiabete_hidden_size)
+		classifier_input_size = num_hidden_size + txt_hidden_size
 		self.classifier = torch.nn.Sequential(
 			torch.nn.Linear(classifier_input_size, classifier_input_size//2),
 			torch.nn.ReLU(),
 			torch.nn.Linear(classifier_input_size//2, 1)
 		)
 
-	def forward(self,
-			X_diagnosi:           torch.Tensor,
-			X_elabparam:          torch.Tensor,
-			X_elabparamcalcolati: torch.Tensor,
-			X_estrumentali:       torch.Tensor,
-			X_pdiabetefarmaci:    torch.Tensor,
-			X_pdiabetenonfarmaci: torch.Tensor,
-			X_pnondiabete:        torch.Tensor
+	def forward(
+			self,
+			X_num: torch.Tensor,
+			X_txt: torch.Tensor,
 		) -> torch.Tensor:
 
 		# NOTE: This step can be parallelized.
-		o_diagnosi,           (h_diagnosi,           c_diagnosi)           = self.lstm_diagnosi(X_diagnosi)
-		o_elabparam,          (h_elabparam,          c_elabparam)          = self.lstm_elabparam(X_elabparam)
-		o_elabparamcalcolati, (h_elabparamcalcolati, c_elabparamcalcolati) = self.lstm_elabparamcalcolati(X_elabparamcalcolati)
-		o_estrumentali,       (h_estrumentali,       c_estrumentali)       = self.lstm_estrumentali(X_estrumentali)
-		o_pdiabetefarmaci,    (h_pdiabetefarmaci,    c_pdiabetefarmaci)    = self.lstm_pdiabetefarmaci(X_pdiabetefarmaci)
-		o_pdiabetenonfarmaci, (h_pdiabetenonfarmaci, c_pdiabetenonfarmaci) = self.lstm_pdiabetenonfarmaci(X_pdiabetenonfarmaci)
-		o_pnondiabete,        (h_pnondiabete,        c_pnondiabete)        = self.lstm_pnondiabete(X_pnondiabete)
+		o_num, (h_num, c_num) = self.lstm_num(X_num)
+		o_txt, (h_txt, c_txt) = self.lstm_txt(X_txt)
 
-		H = torch.cat(
-			[h_diagnosi,
-			h_elabparam,
-			h_elabparamcalcolati,
-			h_estrumentali,
-			h_pdiabetefarmaci,
-			h_pdiabetenonfarmaci,
-			h_pnondiabete],
-			2 # Concat along the features.
-		)
-
+		H = torch.cat([h_num, h_txt], 2) # Concat along the features.
 		res = self.classifier(H) # logits
 
 		return res
 
 net = Model(
-	5, 5, # diagnosi
-	5, 5, # esamilaboratorioparametri
-	5, 5, # esamilaboratorioparametricalcolati
-	5, 5, # esamistrumentali
-	5, 5, # prescrizionidiabetefarmaci
-	5, 5, # prescrizionidiabetenonfarmaci
-	5, 5, # prescrizioninondiabete
+	5, 5, # num
+	5, 5, # txt
 	num_layers = 2,
 	bias = True,
 	batch_first = True,
@@ -276,11 +215,6 @@ _ = net(
 	# The dimensions mean
 	#   * batch, row,     columns, or
 	#   * batch, samples, features
-	torch.ones(1, 10, 5), # diagnosi
-	torch.ones(1, 10, 5), # esamilaboratorioparametri
-	torch.ones(1, 10, 5), # esamilaboratorioparametricalcolati
-	torch.ones(1, 10, 5), # esamistrumentali
-	torch.ones(1, 10, 5), # prescrizionidiabetefarmaci
-	torch.ones(1, 10, 5), # prescrizionidiabetenonfarmaci
-	torch.ones(1, 10, 5)  # prescrizioninondiabete
+	torch.ones(1, 10, 5), # num
+	torch.ones(1, 10, 5)  # txt
 )

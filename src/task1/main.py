@@ -325,10 +325,26 @@ anagraficapazientiattivi = anagraficapazientiattivi.join(
 	(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 )
 
+#review correctness...
+def compute_active_positive_labels():
+	pazienti = globals()['anagraficapazientiattivi'][:]
+	pazienti = pazienti.drop(columns='y')
+	diagnosi_all = globals()['diagnosi'][:]
+
+	last_event = all_events.join(pazienti, ['idcentro', 'idana']) \
+	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
+
+	last_cardiovascular_event = diagnosi_all.groupby(['idcentro', 'idana'], group_keys=True).data.max()
+	positives = pazienti.join(
+		(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
+	)
+	positive_labels = positives['y'].sum() 
+
+	return positive_labels
+
 del patients, all_events, last_event, last_cardiovascular_event
 
 # Point 6
-# TODO: remove NA, NaN and NaT from the data and plotting.
 
 assert anagraficapazientiattivi['sesso'].isna().sum() == 0
 
@@ -342,10 +358,21 @@ mask = percentages > 0.4
 anagraficapazientiattivi = anagraficapazientiattivi.drop(percentages[mask].index, axis=1)
 del percentages, mask
 
+
+#we can't do numerical imputation with codes, but we can't drop data either since they're too many
+#we will fill the empty rows with the most frequent value
+prescrizionidiabetefarmaci['codiceatc'].fillna(prescrizionidiabetefarmaci['codiceatc'].mode()[0], inplace=True)
+esamilaboratorioparametricalcolati['codiceamd'].fillna(esamilaboratorioparametricalcolati['codiceamd'].mode()[0], inplace=True)
+prescrizionidiabetenonfarmaci['valore'].fillna(prescrizionidiabetenonfarmaci['valore'].mode()[0], inplace=True)
+esamistrumentali['valore'].fillna(esamistrumentali['valore'].mode()[0], inplace=True)
+esamilaboratorioparametri['valore'].interpolate(method='linear',inplace=True) #linear interpolation, assumes values equally spaced...
+#imputer = KNNImputer(n_neighbors=1, weights="uniform") #add neighbors if you have computational time
+#we are imputing using idcentro as reference, the idea is that similar lab will make similar results (potentially creates bias)
+#imputer.fit_transform(esamilaboratorioparametri[['valore','idcentro']]) #add idana so that the results are similar for the same patient
+
 #matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
 #matplotlib.pyplot.show()
 
-# TODO: remove remaining NA: for name in names: print(name, globals()[name].isna().any(), sep='\n')
 
 # Data dumping #################################################################
 

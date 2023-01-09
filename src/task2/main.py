@@ -84,7 +84,7 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	copied_positive_patients_df = df.merge(copied_positive_patients, 'inner', ['idcentro', 'idana'])
 	assert len(copied_positive_patients_df) == (m-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
 	copied_positive_patients_df = copied_positive_patients_df.drop(
-		copied_positive_patients_df.sample(None, removed_frac, False).index
+		copied_positive_patients_df.sample(None, removed_frac, False, random_state=rng).index
 	).reset_index(drop=True)
 	offsets = rng.normal(0, 3, len(copied_positive_patients_df)).astype('int')
 	pert = pandas.to_timedelta(offsets, unit='d')
@@ -143,6 +143,8 @@ txt_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfar
 # considered to be the same as 100.
 def add_seniority_level(df: pandas.DataFrame) -> None:
 	tmp = diagnosi.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
+	assert not tmp.data.isna().any()
+	# assert not tmp.annonascita.isna().any() # The problem.
 	seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
 	df['seniority'] = seniority
 
@@ -151,7 +153,11 @@ add_seniority_level(txt_table)
 
 del add_seniority_level
 
-
+# codice amd is going to be encoded with embeddings (like word embeddings).
+# idcentro may contain useful information if for example the medical center is
+# in a place with low health in general and we are again going to use embeddings
+# to encode it (?).
+# seniority and valore can be left as is.
 
 class Model(torch.nn.Module):
 

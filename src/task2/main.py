@@ -109,10 +109,7 @@ prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(
 
 # Deep Learning Stuff ##########################################################
 
-# NOTE: one hot encoding AMD codes could be very large, to improve performance
-# we could do a random projection to a smaller input vector.
-# NOTE: We could add a feature that represents the table from which the data
-# comes from.
+# Data preparation
 
 # Since the only case in which STITCH codes convey useful information is when
 # the AMD code is NA we the a simple substitution of the NAs with the STITCH
@@ -128,12 +125,18 @@ assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
 
 # Now we try to group all the tables in 2 categories the ones with numeric value
-# and the ones with string values.
-num_table = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati], ignore_index=True)
-txt_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
+# and the ones with string values. prescrizionidiabetefarmaci is going to be
+# ignored for LSTMs.
+num_df = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati], ignore_index=True)
+txt_df = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
 # TODO: load cleaned AMD data.
-#assert (txt_table.join(amd, 'codiceamd').tipo == 'Testo').all()
+#assert (txt_df.join(amd, 'codiceamd').tipo == 'Testo').all()
 # Woohoo no more work needed!
+
+# Data needs to be sorted by patients and by data to be able to easly get the
+# history of each patient.
+num_df = num_df.sort_values(['idana', 'data'])
+txt_df = txt_df.sort_values(['idana', 'data'])
 
 # The histogram clearly shows that the majority of patients are old.
 # ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
@@ -141,18 +144,36 @@ txt_table = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfar
 # To give the models an easier time understanding the date in which the event
 # happened we scale it wrt how old the patient is. Any age above 100 years is
 # considered to be the same as 100.
-def add_seniority_level(df: pandas.DataFrame) -> None:
+def seniority_level(df: pandas.DataFrame) -> None:
 	tmp = diagnosi.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
 	assert not tmp.data.isna().any()
 	# assert not tmp.annonascita.isna().any() # The problem.
 	seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
 	df['seniority'] = seniority
+	df.drop('data', axis=1, inplace=True)
 
-add_seniority_level(num_table)
-add_seniority_level(txt_table)
+seniority_level(num_df)
+seniority_level(txt_df)
 
-del add_seniority_level
+del seniority_level
 
+# Ordinal encoding of codiceamd
+codes = pandas.Series(
+	numpy.sort(pandas.concat([num_df.codiceamd, txt_df.codiceamd], ignore_index=True).unique())
+).rename('codiceamd').reset_index()
+num_df = num_df.merge(codes).drop('codiceamd', axis=1).rename({'index': 'codiceamd'}, axis=1)
+txt_df = txt_df.merge(codes).drop('codiceamd', axis=1).rename({'index': 'codiceamd'}, axis=1)
+
+# Ordering columns just for convenience.
+new_columns_order = ['idana', 'idcentro', 'seniority', 'codiceamd', 'valore']
+num_df = num_df.reindex(columns=new_columns_order)
+txt_df = txt_df.reindex(columns=new_columns_order)
+del new_columns_order
+
+# NOTE: one hot encoding AMD codes could be very large, to improve performance
+# we could do a random projection to a smaller input vector.
+# NOTE: We could add a feature that represents the table from which the data
+# comes from.
 # codice amd is going to be encoded with embeddings (like word embeddings).
 # idcentro may contain useful information if for example the medical center is
 # in a place with low health in general and we are again going to use embeddings

@@ -70,13 +70,11 @@ anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazi
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
-# NOTE: this can probabbly be dropped since they are all equal to 5
 anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
 anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
 anagraficapazientiattivi.professione = anagraficapazientiattivi.professione.astype('category')
 anagraficapazientiattivi.origine = anagraficapazientiattivi.origine.astype('category')
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
-# TODO: understand scolarita ,statocivile, professione, origine
 assert not anagraficapazientiattivi.annonascita.isnull().any()
 # Dropping inconsistent birth and deaths (keep in mind that comparisons on NaTs always return False).
 anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index)
@@ -92,7 +90,6 @@ anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagrafi
 logging.info(f'After  initial cleaning: {len(anagraficapazientiattivi)=}')
 del is_not_between
 
-#patient remaining TODO class distribution (i.e. with or without cardiovascular events)
 
 diagnosi = remove_first_column(diagnosi)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
@@ -326,12 +323,15 @@ anagraficapazientiattivi = anagraficapazientiattivi.join(
 )
 
 #review correctness...
-def compute_active_positive_labels():
+def compute_class_distribution():
 	pazienti = globals()['anagraficapazientiattivi'][:]
-	pazienti = pazienti.drop(columns='y')
+	try:
+		pazienti = pazienti.drop(columns='y')
+	except Exception as e:
+		pass
 	diagnosi_all = globals()['diagnosi'][:]
 
-	last_event = all_events.join(pazienti, ['idcentro', 'idana']) \
+	last_event = globals()['all_events'].join(pazienti, ['idcentro', 'idana']) \
 	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
 
 	last_cardiovascular_event = diagnosi_all.groupby(['idcentro', 'idana'], group_keys=True).data.max()
@@ -339,8 +339,9 @@ def compute_active_positive_labels():
 		(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 	)
 	positive_labels = positives['y'].sum() 
+	total_labels = len(pazienti)
 
-	return positive_labels
+	return positive_labels, total_labels
 
 del patients, all_events, last_event, last_cardiovascular_event
 

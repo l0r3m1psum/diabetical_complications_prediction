@@ -70,13 +70,11 @@ anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazi
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
-# NOTE: this can probabbly be dropped since they are all equal to 5
 anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
 anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
 anagraficapazientiattivi.professione = anagraficapazientiattivi.professione.astype('category')
 anagraficapazientiattivi.origine = anagraficapazientiattivi.origine.astype('category')
 anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
-# TODO: understand scolarita ,statocivile, professione, origine
 assert not anagraficapazientiattivi.annonascita.isnull().any()
 # Dropping inconsistent birth and deaths (keep in mind that comparisons on NaTs always return False).
 anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index)
@@ -92,7 +90,6 @@ anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagrafi
 logging.info(f'After  initial cleaning: {len(anagraficapazientiattivi)=}')
 del is_not_between
 
-#patient remaining TODO class distribution (i.e. with or without cardiovascular events)
 
 diagnosi = remove_first_column(diagnosi)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
@@ -325,10 +322,30 @@ anagraficapazientiattivi = anagraficapazientiattivi.join(
 	(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 )
 
+#review correctness...
+def compute_class_distribution():
+	pazienti = globals()['anagraficapazientiattivi'][:]
+	try:
+		pazienti = pazienti.drop(columns='y')
+	except Exception as e:
+		pass
+	diagnosi_all = globals()['diagnosi'][:]
+
+	last_event = globals()['all_events'].join(pazienti, ['idcentro', 'idana']) \
+	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
+
+	last_cardiovascular_event = diagnosi_all.groupby(['idcentro', 'idana'], group_keys=True).data.max()
+	positives = pazienti.join(
+		(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
+	)
+	positive_labels = positives['y'].sum() 
+	total_labels = len(pazienti)
+
+	return positive_labels, total_labels
+
 del patients, all_events, last_event, last_cardiovascular_event
 
 # Point 6
-# TODO: remove NA, NaN and NaT from the data and plotting.
 
 assert anagraficapazientiattivi['sesso'].isna().sum() == 0
 
@@ -342,10 +359,21 @@ mask = percentages > 0.4
 anagraficapazientiattivi = anagraficapazientiattivi.drop(percentages[mask].index, axis=1)
 del percentages, mask
 
+
+#we can't do numerical imputation with codes, but we can't drop data either since they're too many
+#we will fill the empty rows with the most frequent value
+prescrizionidiabetefarmaci['codiceatc'].fillna(prescrizionidiabetefarmaci['codiceatc'].mode()[0], inplace=True)
+esamilaboratorioparametricalcolati['codiceamd'].fillna(esamilaboratorioparametricalcolati['codiceamd'].mode()[0], inplace=True)
+prescrizionidiabetenonfarmaci['valore'].fillna(prescrizionidiabetenonfarmaci['valore'].mode()[0], inplace=True)
+esamistrumentali['valore'].fillna(esamistrumentali['valore'].mode()[0], inplace=True)
+esamilaboratorioparametri['valore'].interpolate(method='linear',inplace=True) #linear interpolation, assumes values equally spaced...
+#imputer = KNNImputer(n_neighbors=1, weights="uniform") #add neighbors if you have computational time
+#we are imputing using idcentro as reference, the idea is that similar lab will make similar results (potentially creates bias)
+#imputer.fit_transform(esamilaboratorioparametri[['valore','idcentro']]) #add idana so that the results are similar for the same patient
+
 #matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
 #matplotlib.pyplot.show()
 
-# TODO: remove remaining NA: for name in names: print(name, globals()[name].isna().any(), sep='\n')
 
 # Data dumping #################################################################
 

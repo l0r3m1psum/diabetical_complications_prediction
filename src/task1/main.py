@@ -106,7 +106,7 @@ esamistrumentali.valore = esamistrumentali.valore.astype('category')
 
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
-prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
+# prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
 
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
@@ -322,7 +322,7 @@ anagraficapazientiattivi = anagraficapazientiattivi.join(
 	(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 )
 
-#review correctness...
+# TODO: review correctness...
 def compute_class_distribution():
 	pazienti = globals()['anagraficapazientiattivi'][:]
 	try:
@@ -359,21 +359,35 @@ mask = percentages > 0.4
 anagraficapazientiattivi = anagraficapazientiattivi.drop(percentages[mask].index, axis=1)
 del percentages, mask
 
-
-#we can't do numerical imputation with codes, but we can't drop data either since they're too many
-#we will fill the empty rows with the most frequent value
-prescrizionidiabetefarmaci['codiceatc'].fillna(prescrizionidiabetefarmaci['codiceatc'].mode()[0], inplace=True)
-esamilaboratorioparametricalcolati['codiceamd'].fillna(esamilaboratorioparametricalcolati['codiceamd'].mode()[0], inplace=True)
-prescrizionidiabetenonfarmaci['valore'].fillna(prescrizionidiabetenonfarmaci['valore'].mode()[0], inplace=True)
-esamistrumentali['valore'].fillna(esamistrumentali['valore'].mode()[0], inplace=True)
-esamilaboratorioparametri['valore'].interpolate(method='linear',inplace=True) #linear interpolation, assumes values equally spaced...
-#imputer = KNNImputer(n_neighbors=1, weights="uniform") #add neighbors if you have computational time
-#we are imputing using idcentro as reference, the idea is that similar lab will make similar results (potentially creates bias)
-#imputer.fit_transform(esamilaboratorioparametri[['valore','idcentro']]) #add idana so that the results are similar for the same patient
-
-#matplotlib.pyplot.hist(anagraficapazientiattivi['scolarita'])
-#matplotlib.pyplot.show()
-
+# We can't do numerical imputation with codes, but we can't drop data either
+# since they're too many therefore we will fill the empty rows with the most
+# frequent value.
+# Here we can drop the NA since they are just 27
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.dropna()
+# NAs in shall not be esamilaboratorioparametricalcolati since they have meaning.
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD927'].codicestitch == 'STITCH001').all()
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD013'].codicestitch == 'STITCH002').all()
+assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD304'].codicestitch == 'STITCH005').all()
+assert esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isna()].codicestitch.isin(['STITCH003', 'STITCH004']).all()
+# Here we drop the NA where codiceamd == 'AMD096' because they are just 11. The
+# remaining NA alle have codiceamd == 'AMD152'.
+mask = prescrizionidiabetenonfarmaci.valore.isna() \
+	& (prescrizionidiabetenonfarmaci.codiceamd == 'AMD096')
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.drop(mask[mask].index)
+mode = prescrizionidiabetenonfarmaci[prescrizionidiabetenonfarmaci.codiceamd == 'AMD152'].valore.mode().item()
+assert (prescrizionidiabetenonfarmaci[prescrizionidiabetenonfarmaci.valore.isna()].codiceamd == 'AMD152').all()
+prescrizionidiabetenonfarmaci.valore.fillna(mode, inplace=True)
+# Here we drop NA where codiceamd == 'AMD126' since they are just 7 and fill NA
+# where codiceamd == 'AMD125' with the proper mode.
+mask = esamistrumentali.valore.isna() \
+	& (esamistrumentali.codiceamd == 'AMD126')
+esamistrumentali = esamistrumentali.drop(mask[mask].index)
+mode = esamistrumentali[esamistrumentali.codiceamd == 'AMD125'].valore.mode().item()
+assert (esamistrumentali[esamistrumentali.valore.isna()].codiceamd == 'AMD125').all()
+esamistrumentali.valore.fillna(mode, inplace=True)
+# NOTE: this may depend on how the data is sorted
+esamilaboratorioparametri['valore'].interpolate(method='linear', inplace=True) # NOTE: linear interpolation, assumes values equally spaced...
+del mask, mode
 
 # Data dumping #################################################################
 

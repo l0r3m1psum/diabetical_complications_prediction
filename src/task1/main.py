@@ -392,7 +392,24 @@ esamistrumentali.valore.fillna(mode, inplace=True)
 esamilaboratorioparametri['valore'].interpolate(method='linear', inplace=True) # NOTE: linear interpolation, assumes values equally spaced...
 del mask, mode
 
-# TODO: assert no more NA except for esamilaboratorioparametricalcolati
+# This is important for task 2 but in general, since we drop rows from random
+# places in the dataframe, we have to keep the index sequential.
+diagnosi = diagnosi.reset_index(drop=True)
+esamilaboratorioparametri = esamilaboratorioparametri.reset_index(drop=True)
+esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.reset_index(drop=True)
+esamistrumentali = esamistrumentali.reset_index(drop=True)
+prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.reset_index(drop=True)
+prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.reset_index(drop=True)
+prescrizioninondiabete = prescrizioninondiabete.reset_index(drop=True)
+
+# All dataframes don't have any NA left (except for esamilaboratorioparametricalcolati).
+assert not diagnosi.isna().any().any()
+assert not esamilaboratorioparametri.isna().any().any()
+# assert not esamilaboratorioparametricalcolati.isna().any().any()
+assert not esamistrumentali.isna().any().any()
+assert not prescrizionidiabetefarmaci.isna().any().any()
+assert not prescrizionidiabetenonfarmaci.isna().any().any()
+assert not prescrizioninondiabete.isna().any().any()
 
 # Data dumping #################################################################
 

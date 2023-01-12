@@ -4,11 +4,18 @@ import random
 
 from common import *
 import torch
+import numpy
 
 logging.info('Loading data.')
 with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_pickle, paths_for_cleaned))))
 del pool
+
+seed = 42
+rng = numpy.random.default_rng(seed)
+number_of_duplications = 3
+assert number_of_duplications > 0
+new_idana_start_point = 1000000
 
 # Point 1
 
@@ -35,24 +42,39 @@ def clean_last_six_months(df: pandas.DataFrame) -> pandas.DataFrame:
 	res = df.drop(mask[mask].index)
 	return res
 
-logging.info('Starting cleaning last six months of history')
+logging.info('Start of task 2.')
 
+logging.info(f'Before six months cleaning: {len(diagnosi)=}')
 diagnosi = clean_last_six_months(diagnosi)
-logging.info(f'{len(esamilaboratorioparametri)=}')
+logging.info(f'After  six months cleaning: {len(diagnosi)=}')
+
+logging.info(f'Before six months cleaning: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = clean_last_six_months(esamilaboratorioparametri)
-logging.info(f'{len(esamilaboratorioparametri)=}')
+logging.info(f'After  six months cleaning: {len(esamilaboratorioparametri)=}')
+
+logging.info(f'Before six months cleaning: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = clean_last_six_months(esamilaboratorioparametricalcolati)
+logging.info(f'After  six months cleaning: {len(esamilaboratorioparametricalcolati)=}')
+
+logging.info(f'Before six months cleaning: {len(esamistrumentali)=}')
 esamistrumentali = clean_last_six_months(esamistrumentali)
+logging.info(f'After  six months cleaning: {len(esamistrumentali)=}')
+
+logging.info(f'Before six months cleaning: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
+logging.info(f'After  six months cleaning: {len(prescrizionidiabetefarmaci)=}')
+
+logging.info(f'Before six months cleaning: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
+logging.info(f'After  six months cleaning: {len(prescrizionidiabetenonfarmaci)=}')
+
+logging.info(f'Before six months cleaning: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
+logging.info(f'After  six months cleaning: {len(prescrizioninondiabete)=}')
 
 del all_events, last_event
 
-m = 3
-assert m > 0
-new_idana_start_point = 1000000
-seed = 42
+logging.info('Starting to balance the dataset.')
 
 # NOTE: saddly just a bijection between new and old idana is not enough because
 # each new group of duplicated patiens needs a bijection between new and old
@@ -60,17 +82,13 @@ seed = 42
 # be n copies of the patients with the new idana. A possible solution could be
 # to add a new row containing a unique number for each duplicated block and
 # create a bijection based on idana and this row.
-copied_positive_patients = pandas.concat([positive_patients]*(m-1), ignore_index=True)
+copied_positive_patients = pandas.concat([positive_patients]*(number_of_duplications-1), ignore_index=True)
 idana = positive_patients.idana.unique()
 idana_conv = pandas.DataFrame({ # The bijection.
 	'idana': idana,
 	'new': pandas.Series([new_idana_start_point + i for i in range(len(idana))])
 })
 del idana
-
-import numpy
-
-rng = numpy.random.default_rng(seed)
 
 def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	"""This function does 5 things:
@@ -82,7 +100,7 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	"""
 	removed_frac = 0.01
 	copied_positive_patients_df = df.merge(copied_positive_patients, 'inner', ['idcentro', 'idana'])
-	assert len(copied_positive_patients_df) == (m-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
+	assert len(copied_positive_patients_df) == (number_of_duplications-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
 	copied_positive_patients_df = copied_positive_patients_df.drop(
 		copied_positive_patients_df.sample(None, removed_frac, False, random_state=rng).index
 	).reset_index(drop=True)

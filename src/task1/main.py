@@ -385,7 +385,10 @@ esamistrumentali = esamistrumentali.drop(mask[mask].index)
 mode = esamistrumentali[esamistrumentali.codiceamd == 'AMD125'].valore.mode().item()
 assert (esamistrumentali[esamistrumentali.valore.isna()].codiceamd == 'AMD125').all()
 esamistrumentali.valore.fillna(mode, inplace=True)
-# NOTE: this may depend on how the data is sorted
+# FIXME: interpolation depends on order and most importantly on the codiceamd.
+# Look at esamilaboratorioparametri[esamilaboratorioparametri.valore.isna()].codiceamd.value_counts()
+# and at esamilaboratorioparametri.codiceamd.value_counts() to make a better
+# decision about how to fill this data.
 esamilaboratorioparametri['valore'].interpolate(method='linear', inplace=True) # NOTE: linear interpolation, assumes values equally spaced...
 del mask, mode
 

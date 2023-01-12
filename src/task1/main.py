@@ -392,6 +392,8 @@ esamistrumentali.valore.fillna(mode, inplace=True)
 esamilaboratorioparametri['valore'].interpolate(method='linear', inplace=True) # NOTE: linear interpolation, assumes values equally spaced...
 del mask, mode
 
+# TODO: assert no more NA except for esamilaboratorioparametricalcolati
+
 # Data dumping #################################################################
 
 logging.info('Dumping data.')

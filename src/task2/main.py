@@ -117,9 +117,9 @@ prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(
 assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD927'].codicestitch == 'STITCH001').all()
 assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD013'].codicestitch == 'STITCH002').all()
 assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD304'].codicestitch == 'STITCH005').all()
-assert esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isnull()].codicestitch.isin(['STITCH003', 'STITCH004']).all()
+assert esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isna()].codicestitch.isin(['STITCH003', 'STITCH004']).all()
 esamilaboratorioparametricalcolati.codiceamd.update(
-	esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isnull()].codicestitch
+	esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isna()].codicestitch
 )
 assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)

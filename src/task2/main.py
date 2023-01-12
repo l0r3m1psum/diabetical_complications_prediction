@@ -124,19 +124,27 @@ esamilaboratorioparametricalcolati.codiceamd.update(
 assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
 
-# Now we try to group all the tables in 2 categories the ones with numeric value
-# and the ones with string values. prescrizionidiabetefarmaci is going to be
-# ignored for LSTMs.
-num_df = pandas.concat([esamilaboratorioparametri, esamilaboratorioparametricalcolati], ignore_index=True)
-txt_df = pandas.concat([diagnosi, esamistrumentali, prescrizionidiabetenonfarmaci, prescrizioninondiabete], ignore_index=True)
-# TODO: load cleaned AMD data.
-#assert (txt_df.join(amd, 'codiceamd').tipo == 'Testo').all()
-# Woohoo no more work needed!
+# For LSTMs the only reasonable way to use all the tables is to drop the
+# 'valore' from all of them, since for each codiceamd there is a different
+# domain, and keep only the events in the hope that enough information is left
+# to make the classification. The idea is the following the value of an exam is
+# less inportant than the sequence: if you did a blood pressure exam the result
+# probabbli doesn't matter if the next "exam" is chemio therapy.
+X = pandas.concat([
+	diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
+	esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
+	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd']],
+	esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
+	prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
+	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
+	prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
+]).rename({'codiceamd': 'codice'}, axis=1)
 
-# Data needs to be sorted by patients and by data to be able to easly get the
-# history of each patient.
-num_df = num_df.sort_values(['idana', 'data'])
-txt_df = txt_df.sort_values(['idana', 'data'])
+# Ordinal encoding of codice
+codes = pandas.Series(numpy.sort(X.codice.unique())).rename('codice').reset_index()
+X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
+
+X = X.sort_values(['idana', 'data'])
 
 # The histogram clearly shows that the majority of patients are old.
 # ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
@@ -144,41 +152,22 @@ txt_df = txt_df.sort_values(['idana', 'data'])
 # To give the models an easier time understanding the date in which the event
 # happened we scale it wrt how old the patient is. Any age above 100 years is
 # considered to be the same as 100.
-def seniority_level(df: pandas.DataFrame) -> None:
-	tmp = diagnosi.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
-	assert not tmp.data.isna().any()
-	# assert not tmp.annonascita.isna().any() # The problem.
-	seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
-	df['seniority'] = seniority
-	df.drop('data', axis=1, inplace=True)
-
-seniority_level(num_df)
-seniority_level(txt_df)
-
-del seniority_level
-
-# Ordinal encoding of codiceamd
-codes = pandas.Series(
-	numpy.sort(pandas.concat([num_df.codiceamd, txt_df.codiceamd], ignore_index=True).unique())
-).rename('codiceamd').reset_index()
-num_df = num_df.merge(codes).drop('codiceamd', axis=1).rename({'index': 'codiceamd'}, axis=1)
-txt_df = txt_df.merge(codes).drop('codiceamd', axis=1).rename({'index': 'codiceamd'}, axis=1)
+tmp = X.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
+assert not tmp.data.isna().any()
+seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
+X['seniority'] = seniority
+X.drop('data', axis=1, inplace=True)
+del tmp
+# FIXME: there are still NaN in seniority because the synthetic patients are not
+# in anagraficapazientiattivi
 
 # Ordering columns just for convenience.
-new_columns_order = ['idana', 'idcentro', 'seniority', 'codiceamd', 'valore']
-num_df = num_df.reindex(columns=new_columns_order)
-txt_df = txt_df.reindex(columns=new_columns_order)
+new_columns_order = ['idana', 'idcentro', 'seniority', 'codice']
+X = X.reindex(columns=new_columns_order)
 del new_columns_order
 
-# NOTE: one hot encoding AMD codes could be very large, to improve performance
-# we could do a random projection to a smaller input vector.
 # NOTE: We could add a feature that represents the table from which the data
 # comes from.
-# codice amd is going to be encoded with embeddings (like word embeddings).
-# idcentro may contain useful information if for example the medical center is
-# in a place with low health in general and we are again going to use embeddings
-# to encode it (?).
-# seniority and valore can be left as is.
 
 class Model(torch.nn.Module):
 

@@ -10,50 +10,49 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 	globals().update(dict(zip(names, pool.map(pandas.read_csv, paths))))
 del pool
 
-# codice_amd = pandas.Categorical(f'AMD{i:03}' for i in range(1, 1000))
-# codice_stitch = pandas.Categorical(f'STITCH{i:03}' for i in range(1, 6))
-# sex = pandas.Categorical(['M', 'F'])
-# meal_id = pandas.Categorical(i for i in range(1, 7))
-# NOTE: should I create a sepatate Categorical for codiceatc too?
-
-# This are also the cardiovascular events.
-# macro_vascular_diseases = codice_amd.take(pandas.Series([47, 48, 49, 71, 81, 82, 208, 303])-1)
-
 # Initial data cleaning ########################################################
 
-logging.info('Initial cleaning of AMD data.')
-amd = pandas.read_csv('data/AMD.csv')
-amd = amd.drop_duplicates()
-assert diagnosi.codiceamd.isin(amd.codice).all()
-assert esamilaboratorioparametri.codiceamd.isin(amd.codice).all()
-assert esamilaboratorioparametricalcolati.codiceamd.isin(amd.codice).all()
-assert esamistrumentali.codiceamd.isin(amd.codice).all()
-assert prescrizionidiabetenonfarmaci.codiceamd.isin(amd.codice).all()
-assert prescrizioninondiabete.codiceamd.isin(amd.codice).all()
-# NA can be safelly dropped since there is all codes needed are already there.
-amd = amd.dropna(axis=0, subset='codice')
-amd = amd.set_index('codice', verify_integrity=True)
-amd = amd.rename_axis('codiceamd')
-assert not (diagnosi.codiceamd == 'AMD243').any()
-assert not (esamilaboratorioparametri.codiceamd == 'AMD243').any()
-assert not (esamilaboratorioparametricalcolati.codiceamd == 'AMD243').any()
-assert not (esamistrumentali.codiceamd == 'AMD243').any()
-assert not (prescrizionidiabetenonfarmaci.codiceamd == 'AMD243').any()
-assert not (prescrizioninondiabete.codiceamd == 'AMD243').any()
-# If you look at this two examples below it is clear that they are both Testo.
-# diagnosi[diagnosi.codiceamd == 'AMD049']
-# prescrizioninondiabete[prescrizioninondiabete.codiceamd == 'AMD121']
-amd.loc['AMD049'] = 'Testo'
-amd.loc['AMD121'] = 'Testo'
-amd = amd.dropna()
-amd.to_pickle('data/AMD_clean.pickle.zip', 'infer', -1)
+# logging.info('Initial cleaning of AMD data.')
+# amd = pandas.read_csv('data/AMD.csv')
+# amd = amd.drop_duplicates()
+# assert diagnosi.codiceamd.isin(amd.codice).all()
+# assert esamilaboratorioparametri.codiceamd.isin(amd.codice).all()
+# assert esamilaboratorioparametricalcolati.codiceamd.isin(amd.codice).all()
+# assert esamistrumentali.codiceamd.isin(amd.codice).all()
+# assert prescrizionidiabetenonfarmaci.codiceamd.isin(amd.codice).all()
+# assert prescrizioninondiabete.codiceamd.isin(amd.codice).all()
+# # NA can be safelly dropped since there is all codes needed are already there.
+# amd = amd.dropna(axis=0, subset='codice')
+# amd = amd.set_index('codice', verify_integrity=True)
+# amd = amd.rename_axis('codiceamd')
+# assert not (diagnosi.codiceamd == 'AMD243').any()
+# assert not (esamilaboratorioparametri.codiceamd == 'AMD243').any()
+# assert not (esamilaboratorioparametricalcolati.codiceamd == 'AMD243').any()
+# assert not (esamistrumentali.codiceamd == 'AMD243').any()
+# assert not (prescrizionidiabetenonfarmaci.codiceamd == 'AMD243').any()
+# assert not (prescrizioninondiabete.codiceamd == 'AMD243').any()
+# # If you look at this two examples below it is clear that they are both Testo.
+# # diagnosi[diagnosi.codiceamd == 'AMD049']
+# # prescrizioninondiabete[prescrizioninondiabete.codiceamd == 'AMD121']
+# amd.loc['AMD049'] = 'Testo'
+# amd.loc['AMD121'] = 'Testo'
+# amd = amd.dropna()
+# amd.to_pickle('data/AMD_clean.pickle.zip', 'infer', -1)
 
-# TODO: What do we do about this?
-# There are ATC codes not in the main table (of ATC codes).
-atc = pandas.read_csv('data/ATC.csv')
-tmp = prescrizionidiabetefarmaci[~prescrizionidiabetefarmaci.codiceatc.isna()]
-tmp[~tmp.codiceatc.isin(atc.atc_code)].codiceatc.unique()
-del tmp
+amd = pandas.read_csv('data/amd_codes_for_bert.csv')
+if (not diagnosi.codiceamd.isin(amd.codice).all()
+	or not esamilaboratorioparametri.codiceamd.isin(amd.codice).all()
+	or not esamilaboratorioparametricalcolati.codiceamd.isin(amd.codice).all()
+	or not esamistrumentali.codiceamd.isin(amd.codice).all()
+	or not prescrizionidiabetenonfarmaci.codiceamd.isin(amd.codice).all()
+	or not prescrizioninondiabete.codiceamd.isin(amd.codice).all()):
+	logging.warning('Not all AMD codes are described.')
+del amd
+
+atc = pandas.read_csv('data/atc_info_nodup.csv')
+if not prescrizionidiabetefarmaci.codiceatc.isin(atc.codiceatc).all():
+	logging.warning('Not all ATC codes are described.')
+del atc
 
 # TODO: idcentro can probably be and int16 and idana can probabbly be an int32
 # to use less memory.
@@ -70,26 +69,26 @@ anagraficapazientiattivi.annodiagnosidiabete = pandas.to_datetime(anagraficapazi
 anagraficapazientiattivi.annonascita = pandas.to_datetime(anagraficapazientiattivi.annonascita, format='%Y')
 anagraficapazientiattivi.annoprimoaccesso = pandas.to_datetime(anagraficapazientiattivi.annoprimoaccesso.astype('Int16'), format='%Y')
 anagraficapazientiattivi.annodecesso = pandas.to_datetime(anagraficapazientiattivi.annodecesso.astype('Int16'), format='%Y')
-anagraficapazientiattivi.scolarita = anagraficapazientiattivi.scolarita.astype('category')
-anagraficapazientiattivi.statocivile = anagraficapazientiattivi.statocivile.astype('category')
-anagraficapazientiattivi.professione = anagraficapazientiattivi.professione.astype('category')
-anagraficapazientiattivi.origine = anagraficapazientiattivi.origine.astype('category')
-anagraficapazientiattivi.tipodiabete = anagraficapazientiattivi.tipodiabete.astype('category')
-assert not anagraficapazientiattivi.annonascita.isnull().any()
 # Dropping inconsistent birth and deaths (keep in mind that comparisons on NaTs always return False).
-anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index)
+anagraficapazientiattivi = anagraficapazientiattivi.drop(
+	anagraficapazientiattivi[anagraficapazientiattivi.annonascita >= anagraficapazientiattivi.annodecesso].index
+)
 # Dropping future deaths.
-anagraficapazientiattivi = anagraficapazientiattivi.drop((anagraficapazientiattivi.annodecesso[~anagraficapazientiattivi.annodecesso.isnull()] < sampling_date).index)
+anagraficapazientiattivi = anagraficapazientiattivi.drop(
+	(anagraficapazientiattivi.annodecesso[~anagraficapazientiattivi.annodecesso.isnull()] < sampling_date).index
+)
 def is_not_between(s: pandas.Series) -> pandas.MultiIndex:
-	res = (anagraficapazientiattivi.annonascita < s) & (s < anagraficapazientiattivi.annodecesso.fillna(sampling_date))
+	res = (anagraficapazientiattivi.annonascita < s) \
+		& (s < anagraficapazientiattivi.annodecesso.fillna(sampling_date))
 	res = (anagraficapazientiattivi[~res]).index
 	return res
-# TODO: what should I do with NaTs in annodiagnosidiabete and annoprimoaccesso.
+# NOTE: since we don't know the true meaning of the data it is hard to decide
+# what should we do with NaTs in annodiagnosidiabete and annoprimoaccesso. Right
+# now they are all removed, it would be nice to find a way to keep some of them.
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annodiagnosidiabete))
 anagraficapazientiattivi = anagraficapazientiattivi.drop(is_not_between(anagraficapazientiattivi.annoprimoaccesso))
 logging.info(f'After  initial cleaning: {len(anagraficapazientiattivi)=}')
 del is_not_between
-
 
 diagnosi = remove_first_column(diagnosi)
 diagnosi.data = pandas.to_datetime(diagnosi.data)
@@ -106,7 +105,6 @@ esamistrumentali.valore = esamistrumentali.valore.astype('category')
 
 prescrizionidiabetefarmaci = remove_first_column(prescrizionidiabetefarmaci)
 prescrizionidiabetefarmaci.data = pandas.to_datetime(prescrizionidiabetefarmaci.data)
-# prescrizionidiabetefarmaci.codiceatc = prescrizionidiabetefarmaci.codiceatc.astype('category')
 
 prescrizionidiabetenonfarmaci = remove_first_column(prescrizionidiabetenonfarmaci)
 prescrizionidiabetenonfarmaci.data = pandas.to_datetime(prescrizionidiabetenonfarmaci.data)
@@ -274,27 +272,51 @@ esamilaboratorioparametri.valore.update(
 	esamilaboratorioparametri[esamilaboratorioparametri.codiceamd == 'AMD008'].valore.clip(5, 15)
 )
 
+# In the original table there are also the STITCH code below but they are not in
+# esamilaboratorioparametri.
 # STITCH002 .clip(30, 300)
 # STITCH003 .clip(60, 330)
 
 # Point 5
-# TODO: log this step.
 
 # Saddly we have to do this step again to make sure that all the patients that
 # were removed from diagnosi in the previous steps are removed also from the
 # other tables.
+logging.info(f'Before point 5: {len(anagraficapazientiattivi)=}')
 anagraficapazientiattivi = diagnosi[['idcentro','idana']] \
 	.join(anagraficapazientiattivi, ['idcentro','idana'], 'inner') \
 	.drop_duplicates(['idcentro','idana']) \
 	.set_index(['idcentro','idana'])
+
 patients = anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
+
+logging.info(f'Before point 5: {len(diagnosi)=}')
 diagnosi = diagnosi.merge(patients)
+logging.info(f'After  point 5: {len(diagnosi)=}')
+
+logging.info(f'Before point 5: {len(esamilaboratorioparametri)=}')
 esamilaboratorioparametri = esamilaboratorioparametri.merge(patients)
+logging.info(f'After  point 5: {len(esamilaboratorioparametri)=}')
+
+logging.info(f'Before point 5: {len(esamilaboratorioparametricalcolati)=}')
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(patients)
+logging.info(f'After  point 5: {len(esamilaboratorioparametricalcolati)=}')
+
+logging.info(f'Before point 5: {len(esamistrumentali)=}')
 esamistrumentali = esamistrumentali.merge(patients)
+logging.info(f'After  point 5: {len(esamistrumentali)=}')
+
+logging.info(f'Before point 5: {len(prescrizionidiabetefarmaci)=}')
 prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(patients)
+logging.info(f'After  point 5: {len(prescrizionidiabetefarmaci)=}')
+
+logging.info(f'Before point 5: {len(prescrizionidiabetenonfarmaci)=}')
 prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(patients)
+logging.info(f'After  point 5: {len(prescrizionidiabetenonfarmaci)=}')
+
+logging.info(f'Before point 5: {len(prescrizioninondiabete)=}')
 prescrizioninondiabete = prescrizioninondiabete.merge(patients)
+logging.info(f'After  point 5: {len(prescrizioninondiabete)=}')
 
 all_events = pandas.concat([
 	diagnosi[['idcentro', 'idana', 'data']],
@@ -306,21 +328,18 @@ all_events = pandas.concat([
 	prescrizioninondiabete[['idcentro', 'idana', 'data']],
 ])
 
-# TODO: delete patients with less than two events.
-(all_events.groupby(['idcentro', 'idana'], group_keys=True).count() < 2)
-
-# NOTE: probabably the join here is useless.
-last_event = all_events.join(anagraficapazientiattivi, ['idcentro', 'idana']) \
-	.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
+assert not (all_events.groupby(['idcentro', 'idana'], group_keys=True).count() < 2).data.any()
+logging.info('There are no patients with less than 2 events to remove.')
 
 assert diagnosi.codiceamd.isin(macro_vascular_diseases).all(), \
 	'diagnosi does not contain only macro vascular diseases'
 
+last_event = all_events.groupby(['idcentro', 'idana'], group_keys=True).data.max().dt.date
 last_cardiovascular_event = diagnosi.groupby(['idcentro', 'idana'], group_keys=True).data.max()
-
 anagraficapazientiattivi = anagraficapazientiattivi.join(
 	(last_cardiovascular_event >= last_event - pandas.DateOffset(month=6)).rename('y')
 )
+logging.info(f'After  point 5: {len(anagraficapazientiattivi)=}')
 
 # TODO: review correctness...
 def compute_class_distribution():
@@ -346,8 +365,10 @@ def compute_class_distribution():
 del patients, all_events, last_event, last_cardiovascular_event
 
 # Point 6
+# TODO: log this step and make sure that the indexes are always correctly and
+# don't have to be reseted every time.
 
-assert anagraficapazientiattivi['sesso'].isna().sum() == 0
+assert not anagraficapazientiattivi.sesso.isna().any()
 
 assert (anagraficapazientiattivi.tipodiabete == 5).all()
 anagraficapazientiattivi = anagraficapazientiattivi.drop('tipodiabete', axis=1)
@@ -403,6 +424,7 @@ prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.reset_index(drop=T
 prescrizioninondiabete = prescrizioninondiabete.reset_index(drop=True)
 
 # All dataframes don't have any NA left (except for esamilaboratorioparametricalcolati).
+assert not anagraficapazientiattivi.isna().any().any()
 assert not diagnosi.isna().any().any()
 assert not esamilaboratorioparametri.isna().any().any()
 # assert not esamilaboratorioparametricalcolati.isna().any().any()
@@ -421,4 +443,4 @@ with multiprocessing.pool.ThreadPool(len(names)) as pool:
 		lambda df, path: df.to_pickle(path, 'infer', -1),
 		zip(dataframes, paths_for_cleaned)
 	)
-del pool
+del dataframes, pool

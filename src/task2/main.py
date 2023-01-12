@@ -157,7 +157,7 @@ assert not tmp.data.isna().any()
 seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
 X['seniority'] = seniority
 X.drop('data', axis=1, inplace=True)
-del tmp
+del tmp, seniority
 # FIXME: there are still NaN in seniority because the synthetic patients are not
 # in anagraficapazientiattivi
 

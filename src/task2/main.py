@@ -76,19 +76,23 @@ del all_events, last_event
 
 logging.info('Starting to balance the dataset.')
 
-# NOTE: saddly just a bijection between new and old idana is not enough because
-# each new group of duplicated patiens needs a bijection between new and old
-# idana. Because otherwise if we duplicate the data n times there are going to
-# be n copies of the patients with the new idana. A possible solution could be
-# to add a new row containing a unique number for each duplicated block and
-# create a bijection based on idana and this row.
-copied_positive_patients = pandas.concat([positive_patients]*(number_of_duplications-1), ignore_index=True)
-idana = positive_patients.idana.unique()
-idana_conv = pandas.DataFrame({ # The bijection.
-	'idana': idana,
-	'new': pandas.Series([new_idana_start_point + i for i in range(len(idana))])
-})
-del idana
+assert (positive_patients == positive_patients.drop_duplicates()).all().all(), \
+	'there are duplicates in the positive patients'
+
+duplicated_positive_patients = []
+for i in range(number_of_duplications-1):
+	copy = positive_patients.copy()
+	copy['iddup'] = i
+	duplicated_positive_patients.append(copy)
+del copy, i
+duplicated_positive_patients = pandas.concat(duplicated_positive_patients, ignore_index=True)
+
+# This is a biijection to make sure that the new synthetic patients have unique
+# ids for each duplication. All indices for this new patients are negative to
+# easly distinguish them from the original ones. We are going to use 'index' to
+# set a new value for 'idana' (changing 'idcentro' would have been the same).
+bijection = duplicated_positive_patients.reset_index()
+bijection['index'] = -bijection['index'] - 1
 
 def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	"""This function does 5 things:
@@ -99,20 +103,29 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 	  4. update the idana
 	"""
 	removed_frac = 0.01
-	copied_positive_patients_df = df.merge(copied_positive_patients, 'inner', ['idcentro', 'idana'])
+
+	copied_positive_patients_df = df.merge(duplicated_positive_patients, 'inner', ['idcentro', 'idana'])
+	assert 'iddup' in copied_positive_patients_df.columns
 	assert len(copied_positive_patients_df) == (number_of_duplications-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
+
 	copied_positive_patients_df = copied_positive_patients_df.drop(
 		copied_positive_patients_df.sample(None, removed_frac, False, random_state=rng).index
 	).reset_index(drop=True)
+
 	offsets = rng.normal(0, 3, len(copied_positive_patients_df)).astype('int')
 	pert = pandas.to_timedelta(offsets, unit='d')
 	copied_positive_patients_df.data = copied_positive_patients_df.data + pert
+
 	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df).reset_index(drop=True)
-	assert copied_positive_patients_df.idana.isin(idana_conv.idana).all()
-	copied_positive_patients_df.idana = copied_positive_patients_df.merge(idana_conv).new
+
+	assert copied_positive_patients_df.idana.isin(bijection.idana).all()
+	copied_positive_patients_df.idana = copied_positive_patients_df.merge(bijection)['index']
+	copied_positive_patients_df = copied_positive_patients_df.drop('iddup', axis=1)
+
 	return copied_positive_patients_df
 
-# TODO: add new patients to anagraficapazientiattivi
+# TODO: find number_of_duplications such that the number of patients with label
+# y==1 is roughly the same as the ones with y==0.
 diagnosi = pandas.concat([diagnosi, naive_balancing(diagnosi)], ignore_index=True)
 esamilaboratorioparametri = pandas.concat([esamilaboratorioparametri, naive_balancing(esamilaboratorioparametri)], ignore_index=True)
 esamilaboratorioparametricalcolati = pandas.concat([esamilaboratorioparametricalcolati, naive_balancing(esamilaboratorioparametricalcolati)], ignore_index=True)
@@ -120,6 +133,16 @@ esamistrumentali = pandas.concat([esamistrumentali, naive_balancing(esamistrumen
 prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_balancing(prescrizionidiabetefarmaci)], ignore_index=True)
 prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
 prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
+
+xx = duplicated_positive_patients.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner')
+assert len(xx) == len(duplicated_positive_patients)
+xx.idana = xx.merge(bijection)['index']
+xx = xx.drop('iddup', axis=1).set_index(['idcentro', 'idana'])
+# TODO: perturbate data in xx
+anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
+
+del xx, naive_balancing, bijection, duplicated_positive_patients, \
+	last_event_positive_patients, clean_last_six_months
 
 # Point 2
 

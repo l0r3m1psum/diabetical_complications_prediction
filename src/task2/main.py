@@ -13,9 +13,8 @@ del pool
 
 seed = 42
 rng = numpy.random.default_rng(seed)
-number_of_duplications = 3
+number_of_duplications = 3 # TODO: right now n-1 duplications are added to the data. This have to be changed.
 assert number_of_duplications > 0
-new_idana_start_point = 1000000
 
 # Point 1
 
@@ -118,7 +117,9 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 
 	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df).reset_index(drop=True)
 
+	# TODO: convert this assertion to using MultiIndex isin.
 	assert copied_positive_patients_df.idana.isin(bijection.idana).all()
+	assert copied_positive_patients_df.idcentro.isin(bijection.idcentro).all()
 	copied_positive_patients_df.idana = copied_positive_patients_df.merge(bijection)['index']
 	copied_positive_patients_df = copied_positive_patients_df.drop('iddup', axis=1)
 
@@ -134,12 +135,22 @@ prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_ba
 prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
 prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
 
-xx = duplicated_positive_patients.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner')
+# TODO: check that the index stuff is correct for real (and check in naive_balancing too)!
+xx = duplicated_positive_patients.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner').reset_index(drop=True)
 assert len(xx) == len(duplicated_positive_patients)
-xx.idana = xx.merge(bijection)['index']
+assert xx.y.all()
+xx.idana.update(xx.merge(bijection)['index'])
 xx = xx.drop('iddup', axis=1).set_index(['idcentro', 'idana'])
 # TODO: perturbate data in xx
 anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
+
+assert len(diagnosi)                           == len(diagnosi                          .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(esamilaboratorioparametri)          == len(esamilaboratorioparametri         .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(esamilaboratorioparametricalcolati) == len(esamilaboratorioparametricalcolati.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(esamistrumentali)                   == len(esamistrumentali                  .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(prescrizionidiabetefarmaci)         == len(prescrizionidiabetefarmaci        .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(prescrizionidiabetenonfarmaci)      == len(prescrizionidiabetenonfarmaci     .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
+assert len(prescrizioninondiabete)             == len(prescrizioninondiabete            .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
 
 del xx, naive_balancing, bijection, duplicated_positive_patients, \
 	last_event_positive_patients, clean_last_six_months
@@ -172,20 +183,20 @@ esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('co
 # less inportant than the sequence: if you did a blood pressure exam the result
 # probabbli doesn't matter if the next "exam" is chemio therapy.
 X = pandas.concat([
-	diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
-	esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
+	                          diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
+	         esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
 	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd']],
-	esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
-	prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
-	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
-	prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
+	                  esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
+	        prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
+	     prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
+	            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
 ]).rename({'codiceamd': 'codice'}, axis=1)
 
 # Ordinal encoding of codice
 codes = pandas.Series(numpy.sort(X.codice.unique())).rename('codice').reset_index()
 X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 
-X = X.sort_values(['idana', 'data'])
+X = X.sort_values(['idana', 'data']).reset_index(drop=True)
 
 # The histogram clearly shows that the majority of patients are old.
 # ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
@@ -195,6 +206,7 @@ X = X.sort_values(['idana', 'data'])
 # considered to be the same as 100.
 tmp = X.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
 assert not tmp.data.isna().any()
+assert not tmp.annonascita.isna().any()
 seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
 X['seniority'] = seniority
 X.drop('data', axis=1, inplace=True)

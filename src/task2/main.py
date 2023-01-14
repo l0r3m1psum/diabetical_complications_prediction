@@ -117,11 +117,10 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 
 	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df).reset_index(drop=True)
 
-	# TODO: convert this assertion to using MultiIndex isin.
-	assert copied_positive_patients_df.idana.isin(bijection.idana).all()
-	assert copied_positive_patients_df.idcentro.isin(bijection.idcentro).all()
-	copied_positive_patients_df.idana = copied_positive_patients_df.merge(bijection)['index']
-	copied_positive_patients_df = copied_positive_patients_df.drop('iddup', axis=1)
+	assert pandas.MultiIndex.from_frame(copied_positive_patients_df[['idcentro', 'idana']]) \
+		.isin(pandas.MultiIndex.from_frame(bijection[['idcentro', 'idana']])).all()
+	copied_positive_patients_df = copied_positive_patients_df.merge(bijection) \
+		.drop(['iddup', 'idana'], axis=1).rename({'index': 'idana'}, axis=1)
 
 	return copied_positive_patients_df
 
@@ -135,12 +134,11 @@ prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_ba
 prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
 prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
 
-# TODO: check that the index stuff is correct for real (and check in naive_balancing too)!
 xx = duplicated_positive_patients.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner').reset_index(drop=True)
 assert len(xx) == len(duplicated_positive_patients)
 assert xx.y.all()
-xx.idana.update(xx.merge(bijection)['index'])
-xx = xx.drop('iddup', axis=1).set_index(['idcentro', 'idana'])
+xx = xx.merge(bijection).drop(['iddup', 'idana'], axis=1) \
+	.rename({'index': 'idana'}, axis=1).set_index(['idcentro', 'idana'])
 # TODO: perturbate data in xx
 anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
 
@@ -211,8 +209,6 @@ seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.
 X['seniority'] = seniority
 X.drop('data', axis=1, inplace=True)
 del tmp, seniority
-# FIXME: there are still NaN in seniority because the synthetic patients are not
-# in anagraficapazientiattivi
 
 # Ordering columns just for convenience.
 new_columns_order = ['idana', 'idcentro', 'seniority', 'codice']

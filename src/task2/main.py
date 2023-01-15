@@ -191,8 +191,7 @@ X = pandas.concat([
 ]).rename({'codiceamd': 'codice'}, axis=1)
 
 # Ordinal encoding of codice
-# TODO: use 0 for padding.
-codes = pandas.Series(numpy.sort(X.codice.unique())).rename('codice').reset_index()
+codes = pandas.Series(numpy.concatenate([['PADDING'], numpy.sort(X.codice.unique())])).rename('codice').reset_index()
 X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 
 # NOTE: this should be useless since we order again below.

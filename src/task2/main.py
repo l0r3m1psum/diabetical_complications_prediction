@@ -194,7 +194,8 @@ X = pandas.concat([
 codes = pandas.Series(numpy.sort(X.codice.unique())).rename('codice').reset_index()
 X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 
-X = X.sort_values(['idana', 'data']).reset_index(drop=True)
+# NOTE: this should be useless since we order again below.
+X = X.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
 
 # The histogram clearly shows that the majority of patients are old.
 # ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
@@ -217,6 +218,17 @@ del new_columns_order
 
 # NOTE: We could add a feature that represents the table from which the data
 # comes from.
+
+# Here we create a tensor for the history of each patients.
+s = X.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
+indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
+tot = len(X)
+splits = numpy.concatenate([indexes[:1], numpy.diff(indexes)])
+splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
+assert splits.sum() == tot
+codes = torch.split(torch.tensor(X.codice.values), list(splits))
+seniorities = torch.split(torch.tensor(X.seniority.values), list(splits))
+del s, index, tot, splits
 
 class Model(torch.nn.Module):
 

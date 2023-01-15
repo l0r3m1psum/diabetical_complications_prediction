@@ -191,6 +191,7 @@ X = pandas.concat([
 ]).rename({'codiceamd': 'codice'}, axis=1)
 
 # Ordinal encoding of codice
+# TODO: use 0 for padding.
 codes = pandas.Series(numpy.sort(X.codice.unique())).rename('codice').reset_index()
 X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 
@@ -228,7 +229,35 @@ splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
 assert splits.sum() == tot
 codes = torch.split(torch.tensor(X.codice.values), list(splits))
 seniorities = torch.split(torch.tensor(X.seniority.values), list(splits))
-del s, index, tot, splits
+del s, indexes, tot, splits
+
+class HistDataset(torch.utils.data.Dataset):
+
+	def __init__(self, X):
+		self.X = X
+
+	def __len__(self):
+		return len(self.X)
+
+	def __getitem__(self, index):
+		return self.X[index]
+
+codes_dataset = HistDataset(codes)
+seniorities_dataset = HistDataset(seniorities)
+
+batch_size = 128
+codes_dataloader = torch.utils.data.DataLoader(
+	dataset=codes_dataset,
+	batch_size=batch_size,
+	shuffle=True,
+	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
+)
+seniorities_dataloader = torch.utils.data.DataLoader(
+	dataset=seniorities_dataset,
+	batch_size=batch_size,
+	shuffle=True,
+	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
+)
 
 class Model(torch.nn.Module):
 

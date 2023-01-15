@@ -220,6 +220,7 @@ del new_columns_order
 # comes from.
 
 # Here we create a tensor for the history of each patients.
+# TODO: put some assertions to verify that this split is correct.
 s = X.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
 indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
 tot = len(X)
@@ -227,7 +228,7 @@ splits = numpy.concatenate([indexes[:1], numpy.diff(indexes)])
 splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
 assert splits.sum() == tot
 codes = torch.split(torch.tensor(X.codice.values), list(splits))
-seniorities = torch.split(torch.tensor(X.seniority.values), list(splits))
+seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
 del s, indexes, tot, splits
 
 class HistDataset(torch.utils.data.Dataset):
@@ -245,16 +246,18 @@ codes_dataset = HistDataset(codes)
 seniorities_dataset = HistDataset(seniorities)
 
 batch_size = 128
+# TODO: find a way to shuffle them consistently.
+# TODO: i have to get their labels.
 codes_dataloader = torch.utils.data.DataLoader(
 	dataset=codes_dataset,
 	batch_size=batch_size,
-	shuffle=True,
+	shuffle=False,
 	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
 )
 seniorities_dataloader = torch.utils.data.DataLoader(
 	dataset=seniorities_dataset,
 	batch_size=batch_size,
-	shuffle=True,
+	shuffle=False,
 	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
 )
 
@@ -262,33 +265,36 @@ class Model(torch.nn.Module):
 
 	def __init__(
 			self,
-			num_input_size: int,
-			num_hidden_size: int,
-			txt_input_size: int,
-			txt_hidden_size: int,
-			# Common arguments to all LSTMs.
-			num_layers: int,
-			bias: bool,
-			batch_first: bool,
-			dropout: float,
-			bidirectional: bool,
-			proj_size: int
+			num_embeddings: int,
+			embedding_dim: int,
+			lstm_hidden_size: int,
+			lstm_num_layers: int,
+			lstm_bias: bool,
+			lstm_batch_first: bool,
+			lstm_dropout: float,
+			lstm_bidirectional: bool,
+			lstm_proj_size: int
 		) -> None:
 		super().__init__()
 
-		common_args = {
-			'num_layers':    num_layers,
-			'bias':          bias,
-			'batch_first':   batch_first,
-			'dropout':       dropout,
-			'bidirectional': bidirectional,
-			'proj_size':     proj_size,
-		}
+		self.codes_embeddings = torch.nn.Embedding(
+			num_embeddings, embedding_dim, padding_idx=0
+		)
 
-		self.lstm_num = torch.nn.LSTM(num_input_size, num_hidden_size, **common_args)
-		self.lstm_txt = torch.nn.LSTM(txt_input_size, txt_hidden_size, **common_args)
+		self.lstm = torch.nn.LSTM(
+			embedding_dim + 1, # The additional dimension is for seniority.,
+			lstm_hidden_size,
+			lstm_num_layers,
+			lstm_bias,
+			lstm_batch_first,
+			lstm_dropout,
+			lstm_bidirectional,
+			lstm_proj_size
+		)
 
-		classifier_input_size = num_hidden_size + txt_hidden_size
+		# if lstm_bidirectional the input size doubles
+		classifier_input_size = 2*lstm_hidden_size if lstm_bidirectional \
+			else lstm_hidden_size
 		self.classifier = torch.nn.Sequential(
 			torch.nn.Linear(classifier_input_size, classifier_input_size//2),
 			torch.nn.ReLU(),
@@ -297,34 +303,35 @@ class Model(torch.nn.Module):
 
 	def forward(
 			self,
-			X_num: torch.Tensor,
-			X_txt: torch.Tensor,
+			X_seniority: torch.Tensor,
+			X_codes: torch.Tensor,
 		) -> torch.Tensor:
+		assert X_seniority.shape[:2] == X_codes.shape[:2]
 
-		# NOTE: This step can be parallelized.
-		o_num, (h_num, c_num) = self.lstm_num(X_num)
-		o_txt, (h_txt, c_txt) = self.lstm_txt(X_txt)
+		X_codes_embeddings = self.codes_embeddings(X_codes)
+		assert X_codes_embeddings.dtype == X_seniority.dtype
+		# batch, len, dim
+		X = torch.cat([X_seniority.unsqueeze(2), X_codes_embeddings], 2)
 
-		H = torch.cat([h_num, h_txt], 2) # Concat along the features.
-		res = self.classifier(H) # logits
+		o, (h, c) = self.lstm(X)
+
+		res = self.classifier(o) # logits
 
 		return res
 
 net = Model(
-	5, 5, # num
-	5, 5, # txt
-	num_layers = 2,
-	bias = True,
-	batch_first = True,
-	dropout = 0.1, # Probability of removing.
-	bidirectional = True,
-	proj_size = 0 # I don't know what this does.
+	num_embeddings=len(codes),
+	embedding_dim=100,
+	lstm_hidden_size=50,
+	lstm_num_layers=3,
+	lstm_bias=True,
+	lstm_batch_first=True,
+	lstm_dropout=0.1, # Probability of removing.
+	lstm_bidirectional=True,
+	lstm_proj_size=0 # I don't know what this does.
 )
 print(net)
 _ = net(
-	# The dimensions mean
-	#   * batch, row,     columns, or
-	#   * batch, samples, features
-	torch.ones(1, 10, 5), # num
-	torch.ones(1, 10, 5)  # txt
+	next(iter(seniorities_dataloader)),
+	next(iter(codes_dataloader))
 )

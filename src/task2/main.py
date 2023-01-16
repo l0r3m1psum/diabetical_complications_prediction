@@ -256,7 +256,6 @@ labels_dataset = HistDataset(labels)
 
 batch_size = 128
 # TODO: find a way to shuffle them consistently.
-# TODO: i have to get their labels.
 codes_dataloader = torch.utils.data.DataLoader(
 	dataset=codes_dataset,
 	batch_size=batch_size,
@@ -350,3 +349,4 @@ logits = net(
 	next(iter(codes_dataloader))
 )
 target = next(iter(labels_dataloader))
+

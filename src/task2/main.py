@@ -190,6 +190,11 @@ X = pandas.concat([
 	            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
 ]).rename({'codiceamd': 'codice'}, axis=1)
 
+# There are probbaly less wasteful ways to do this but this is the easiest one
+# to keep labels in sync with the data.
+assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))
+X = X.join(anagraficapazientiattivi.y, ['idcentro', 'idana'])
+
 # Ordinal encoding of codice
 codes = pandas.Series(numpy.concatenate([['PADDING'], numpy.sort(X.codice.unique())])).rename('codice').reset_index()
 X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
@@ -212,7 +217,7 @@ X.drop('data', axis=1, inplace=True)
 del tmp, seniority
 
 # Ordering columns just for convenience.
-new_columns_order = ['idana', 'idcentro', 'seniority', 'codice']
+new_columns_order = ['idana', 'idcentro', 'seniority', 'codice', 'y']
 X = X.reindex(columns=new_columns_order)
 del new_columns_order
 
@@ -229,6 +234,9 @@ splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
 assert splits.sum() == tot
 codes = torch.split(torch.tensor(X.codice.values), list(splits))
 seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
+labels = torch.split(torch.tensor(X.y.values), list(splits))
+# Since they are all equal.
+labels = [t[0] for t in labels]
 del s, indexes, tot, splits
 
 class HistDataset(torch.utils.data.Dataset):
@@ -244,6 +252,7 @@ class HistDataset(torch.utils.data.Dataset):
 
 codes_dataset = HistDataset(codes)
 seniorities_dataset = HistDataset(seniorities)
+labels_dataset = HistDataset(labels)
 
 batch_size = 128
 # TODO: find a way to shuffle them consistently.
@@ -259,6 +268,11 @@ seniorities_dataloader = torch.utils.data.DataLoader(
 	batch_size=batch_size,
 	shuffle=False,
 	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
+)
+labels_dataloader = torch.utils.data.DataLoader(
+	dataset=labels_dataset,
+	batch_size=batch_size,
+	shuffle=False
 )
 
 class Model(torch.nn.Module):
@@ -331,7 +345,8 @@ net = Model(
 	lstm_proj_size=0 # I don't know what this does.
 )
 print(net)
-_ = net(
+logits = net(
 	next(iter(seniorities_dataloader)),
 	next(iter(codes_dataloader))
 )
+target = next(iter(labels_dataloader))

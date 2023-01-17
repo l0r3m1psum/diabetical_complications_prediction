@@ -239,39 +239,40 @@ labels = torch.split(torch.tensor(X.y.values), list(splits))
 labels = [t[0] for t in labels]
 del s, indexes, tot, splits
 
-class HistDataset(torch.utils.data.Dataset):
+class TensorListDataset(torch.utils.data.Dataset):
 
-	def __init__(self, X):
-		self.X = X
+	def __init__(self, *tensors_lists) -> None:
+		lengths = [len(tensors_list) for tensors_list in tensors_lists]
+		if not all(lengths[0] == length for length in lengths):
+			raise ValueError("All lists of tensors must have the same length.")
+		# NOTE: all list should contain only tensors.
+		self.tensors_lists = tensors_lists
 
-	def __len__(self):
-		return len(self.X)
+	def __len__(self) -> int:
+		return len(self.tensors_lists[0])
 
 	def __getitem__(self, index):
-		return self.X[index]
+		return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
 
-codes_dataset = HistDataset(codes)
-seniorities_dataset = HistDataset(seniorities)
-labels_dataset = HistDataset(labels)
+dataset = TensorListDataset(seniorities, codes, labels)
+
+def collate_fn(batch):
+	seniorities = torch.nn.utils.rnn.pad_sequence(
+		[seniority for seniority, _, _ in batch],
+		batch_first=True,
+		padding_value=0.0
+	)
+	codes = torch.nn.utils.rnn.pad_sequence([code for _, code, _ in batch], True, 0)
+	labels = torch.tensor([label for _, _, label in batch])
+	return seniorities, codes, labels
 
 batch_size = 128
 # TODO: find a way to shuffle them consistently.
-codes_dataloader = torch.utils.data.DataLoader(
-	dataset=codes_dataset,
+dataloader = torch.utils.data.DataLoader(
+	dataset=dataset,
 	batch_size=batch_size,
-	shuffle=False,
-	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
-)
-seniorities_dataloader = torch.utils.data.DataLoader(
-	dataset=seniorities_dataset,
-	batch_size=batch_size,
-	shuffle=False,
-	collate_fn=lambda batch: torch.nn.utils.rnn.pad_sequence(batch, True, 0)
-)
-labels_dataloader = torch.utils.data.DataLoader(
-	dataset=labels_dataset,
-	batch_size=batch_size,
-	shuffle=False
+	shuffle=True,
+	collate_fn=collate_fn
 )
 
 class Model(torch.nn.Module):
@@ -344,9 +345,6 @@ net = Model(
 	lstm_proj_size=0 # I don't know what this does.
 )
 print(net)
-logits = net(
-	next(iter(seniorities_dataloader)),
-	next(iter(codes_dataloader))
-)
-target = next(iter(labels_dataloader))
+sen, cod, target = next(iter(dataloader))
+logits = net(sen, cod)
 

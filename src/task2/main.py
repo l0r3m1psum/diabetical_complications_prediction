@@ -15,6 +15,7 @@ seed = 42
 rng = numpy.random.default_rng(seed)
 number_of_duplications = 3 # TODO: right now n-1 duplications are added to the data. This have to be changed.
 assert number_of_duplications > 0
+batch_size = 128
 
 # Point 1
 
@@ -239,6 +240,18 @@ labels = torch.split(torch.tensor(X.y.values), list(splits))
 labels = [t[0] for t in labels]
 del s, indexes, tot, splits
 
+split = int(len(labels)*.8) # 80% of the data
+train_codes = codes[:split]
+train_seniorities = seniorities[:split]
+train_labels = labels[:split]
+test_codes = codes[split:]
+test_seniorities = seniorities[split:]
+test_labels = labels[split:]
+assert len(train_codes) + len(test_codes) == len(codes)
+assert len(train_seniorities) + len(test_seniorities) == len(seniorities)
+assert len(train_labels) + len(test_labels) == len(labels)
+del split
+
 class TensorListDataset(torch.utils.data.Dataset):
 
 	def __init__(self, *tensors_lists) -> None:
@@ -254,7 +267,8 @@ class TensorListDataset(torch.utils.data.Dataset):
 	def __getitem__(self, index):
 		return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
 
-dataset = TensorListDataset(seniorities, codes, labels)
+train_dataset = TensorListDataset(train_seniorities, train_codes, train_labels)
+test_dataset = TensorListDataset(test_seniorities, test_codes, test_labels)
 
 def collate_fn(batch):
 	seniorities = torch.nn.utils.rnn.pad_sequence(
@@ -266,10 +280,14 @@ def collate_fn(batch):
 	labels = torch.tensor([label for _, _, label in batch])
 	return seniorities, codes, labels
 
-batch_size = 128
-# TODO: find a way to shuffle them consistently.
-dataloader = torch.utils.data.DataLoader(
-	dataset=dataset,
+train_dataloader = torch.utils.data.DataLoader(
+	dataset=train_dataset,
+	batch_size=batch_size,
+	shuffle=True,
+	collate_fn=collate_fn
+)
+test_dataloader = torch.utils.data.DataLoader(
+	dataset=test_dataset,
 	batch_size=batch_size,
 	shuffle=True,
 	collate_fn=collate_fn
@@ -345,6 +363,5 @@ net = Model(
 	lstm_proj_size=0 # I don't know what this does.
 )
 print(net)
-sen, cod, target = next(iter(dataloader))
+sen, cod, target = next(iter(train_dataloader))
 logits = net(sen, cod)
-

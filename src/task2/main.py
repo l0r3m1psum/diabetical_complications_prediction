@@ -16,6 +16,7 @@ rng = numpy.random.default_rng(seed)
 number_of_duplications = 3 # TODO: right now n-1 duplications are added to the data. This have to be changed.
 assert number_of_duplications > 0
 batch_size = 128
+torch.manual_seed(seed)
 
 # Point 1
 
@@ -347,21 +348,101 @@ class Model(torch.nn.Module):
 
 		o, (h, c) = self.lstm(X)
 
-		res = self.classifier(o) # logits
+		res = self.classifier(h) # logits
 
 		return res
 
 net = Model(
 	num_embeddings=len(codes),
-	embedding_dim=100,
-	lstm_hidden_size=50,
-	lstm_num_layers=3,
+	embedding_dim=50,
+	lstm_hidden_size=20,
+	lstm_num_layers=1,
 	lstm_bias=True,
 	lstm_batch_first=True,
 	lstm_dropout=0.1, # Probability of removing.
-	lstm_bidirectional=True,
+	lstm_bidirectional=False,
 	lstm_proj_size=0 # I don't know what this does.
 )
 print(net)
+
+def train(
+		net: torch.nn.Module,
+		epochs: int,
+		patience: int,
+		train_dataloader: torch.utils.data.DataLoader,
+		logit_normalizer: torch.nn.Module,
+		label_postproc: torch.nn.Module,
+		criterion: torch.nn.Module,
+		optimizer, # no type here :( torch.optimizer.Optimizer
+		test_dataloader: torch.utils.data.DataLoader
+	) -> float:
+	patience_kept = 0
+	best_epoch = 0
+	best_accuracy = float('-inf')
+
+	for epoch in range(epochs):
+		if patience_kept >= patience: break
+
+		net.train()
+		losses: list[float] = []
+		for i, (seniorities, codes, labels) in enumerate(train_dataloader):
+			# NOTE: should tensors be moved here to device instead of a priori?
+			seniorities: torch.Tensor
+			codes: torch.Tensor
+			labels: torch.Tensor
+
+			logits = net(seniorities, codes)
+			predictions = logit_normalizer(logits)
+
+			loss = criterion(predictions, label_postproc(labels).to(torch.float32))
+			losses.append(loss.item())
+
+			loss.backward()
+
+			optimizer.step()
+			optimizer.zero_grad()
+		avg_loss = torch.mean(torch.tensor(losses))
+
+		net.eval()
+		correct = 0
+		with torch.no_grad():
+			for seniorities, codes, labels in test_dataloader:
+				logits = net(seniorities, codes)
+				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+
+				# assert (predictions < N_CLASSES).all()
+				# assert (labels < N_CLASSES).all()
+				# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
+
+				correct += (predictions == labels).sum().item()
+		accuracy = correct/len(test_dataloader.dataset)
+		assert accuracy <= 1.0
+
+		if accuracy > best_accuracy:
+			patience_kept = 0
+			# best_params = net.params()
+			best_epoch = epoch
+			best_accuracy = accuracy
+			marker = ' *'
+		else:
+			patience_kept += 1
+			marker = ''
+
+		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+
+	print(f'{best_epoch=} {best_accuracy=:.3f}')
+	return best_accuracy
+
+_ = train(
+	net,
+	100,
+	50,
+	train_dataloader,
+	torch.nn.Softmax(dim=1),
+	torch.nn.Identity(),
+	torch.nn.MSELoss(),
+	torch.optim.SGD(net.parameters(), lr=0.01),
+	test_dataloader
+)
 sen, cod, target = next(iter(train_dataloader))
 logits = net(sen, cod)

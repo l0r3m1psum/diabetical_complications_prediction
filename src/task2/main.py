@@ -394,7 +394,7 @@ def train(
 			logits = net(seniorities, codes)
 			predictions = logit_normalizer(logits)
 
-			loss = criterion(predictions, label_postproc(labels).to(torch.float32))
+			loss = criterion(predictions.squeeze(), label_postproc(labels).to(torch.float32).squeeze())
 			losses.append(loss.item())
 
 			loss.backward()
@@ -440,7 +440,7 @@ _ = train(
 	train_dataloader,
 	torch.nn.Softmax(dim=1),
 	torch.nn.Identity(),
-	torch.nn.MSELoss(),
+	torch.nn.BCELoss(),
 	torch.optim.SGD(net.parameters(), lr=0.01),
 	test_dataloader
 )

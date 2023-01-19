@@ -491,14 +491,31 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	]).merge(amd, 'inner', 'codiceamd')
 	assert not all_tables.isna().any().any()
 
+	# NOTE: sorting may not be needed.
 	all_tables = pandas.concat([all_tables, odd_table]) \
 		.sort_values(['idcentro', 'idana', 'data']) \
 		.reset_index(drop=True)
 	del odd_table
 
-	# Assuming that this is the history of a patient.
-	hist = all_tables.iloc[:10]
-	'. '.join(hist.meaning + ' ' + hist.valore.astype('str')) + '.'
+	# Assuming that groupby preserves the order
+	X =  tuple(all_tables.groupby(['idcentro', 'idana']))
+
+	x = X[123][1]
+	text = '. '.join(x.meaning + ' ' + x.valore.astype('str')) + '.'
+
+	import transformers
+
+	# NOTE: torch.load('data/pubmedbert/pytorch_model.bin') this loads all the
+	# layers of the model in a strange form.
+	config = transformers.BertConfig.from_json_file("data/pubmedbert/config.json")
+	model = transformers.BertForSequenceClassification.from_pretrained("data/pubmedbert/", config=config)
+	tokenizer = transformers.BertTokenizer.from_pretrained("data/pubmedbert/", truncation_side='left')
+
+	# Il modello non può prendere in input sequenze più lunghe di 512.
+	tokenized_input = tokenizer(text, return_tensors="pt", max_length=512,
+		truncation=True, padding=True)
+	with torch.no_grad():
+		res = model(**tokenized_input)
 
 	# Come do i dati in pasto a BERT?
 	# Devo generare il testo on the fly e lo posso dificere in batch

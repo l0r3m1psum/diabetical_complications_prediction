@@ -176,273 +176,330 @@ esamilaboratorioparametricalcolati.codiceamd.update(
 assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
 
-# For LSTMs the only reasonable way to use all the tables is to drop the
-# 'valore' from all of them, since for each codiceamd there is a different
-# domain, and keep only the events in the hope that enough information is left
-# to make the classification. The idea is the following the value of an exam is
-# less inportant than the sequence: if you did a blood pressure exam the result
-# probabbli doesn't matter if the next "exam" is chemio therapy.
-X = pandas.concat([
-	                          diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
-	         esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
-	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd']],
-	                  esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
-	        prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
-	     prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
-	            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
-]).rename({'codiceamd': 'codice'}, axis=1)
+which_model_to_use = 'BERT'
 
-# There are probbaly less wasteful ways to do this but this is the easiest one
-# to keep labels in sync with the data.
-assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))
-X = X.join(anagraficapazientiattivi.y, ['idcentro', 'idana'])
+if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
+	# For LSTMs the only reasonable way to use all the tables is to drop the
+	# 'valore' from all of them, since for each codiceamd there is a different
+	# domain, and keep only the events in the hope that enough information is left
+	# to make the classification. The idea is the following the value of an exam is
+	# less inportant than the sequence: if you did a blood pressure exam the result
+	# probabbli doesn't matter if the next "exam" is chemio therapy.
+	X = pandas.concat([
+		                          diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
+		         esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
+		esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd']],
+		                  esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
+		        prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
+		     prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
+		            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
+	]).rename({'codiceamd': 'codice'}, axis=1)
 
-# Ordinal encoding of codice
-codes = pandas.Series(numpy.concatenate([['PADDING'], numpy.sort(X.codice.unique())])).rename('codice').reset_index()
-X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
+	# There are probbaly less wasteful ways to do this but this is the easiest one
+	# to keep labels in sync with the data.
+	assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))
+	X = X.join(anagraficapazientiattivi.y, ['idcentro', 'idana'])
 
-# NOTE: this should be useless since we order again below.
-X = X.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
+	# Ordinal encoding of codice
+	codes = pandas.Series(numpy.concatenate([['PADDING'], numpy.sort(X.codice.unique())])).rename('codice').reset_index()
+	X = X.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 
-# The histogram clearly shows that the majority of patients are old.
-# ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
+	# NOTE: this should be useless since we order again below.
+	X = X.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
 
-# To give the models an easier time understanding the date in which the event
-# happened we scale it wrt how old the patient is. Any age above 100 years is
-# considered to be the same as 100.
-tmp = X.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
-assert not tmp.data.isna().any()
-assert not tmp.annonascita.isna().any()
-seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
-X['seniority'] = seniority
-X.drop('data', axis=1, inplace=True)
-del tmp, seniority
+	# The histogram clearly shows that the majority of patients are old.
+	# ages = (sampling_date - anagraficapazientiattivi.annonascita).astype('<m8[Y]').rename('eta')
 
-# Ordering columns just for convenience.
-new_columns_order = ['idana', 'idcentro', 'seniority', 'codice', 'y']
-X = X.reindex(columns=new_columns_order)
-del new_columns_order
+	# To give the models an easier time understanding the date in which the event
+	# happened we scale it wrt how old the patient is. Any age above 100 years is
+	# considered to be the same as 100.
+	tmp = X.join(anagraficapazientiattivi.annonascita, ['idcentro', 'idana'])
+	assert not tmp.data.isna().any()
+	assert not tmp.annonascita.isna().any()
+	seniority = (tmp.data - tmp.annonascita).astype('<m8[Y]').clip(None, 100.0)/100.0
+	X['seniority'] = seniority
+	X.drop('data', axis=1, inplace=True)
+	del tmp, seniority
 
-# NOTE: We could add a feature that represents the table from which the data
-# comes from.
+	# Ordering columns just for convenience.
+	new_columns_order = ['idana', 'idcentro', 'seniority', 'codice', 'y']
+	X = X.reindex(columns=new_columns_order)
+	del new_columns_order
 
-# Here we create a tensor for the history of each patients.
-# TODO: put some assertions to verify that this split is correct.
-s = X.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
-indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
-tot = len(X)
-splits = numpy.concatenate([indexes[:1], numpy.diff(indexes)])
-splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
-assert splits.sum() == tot
-codes = torch.split(torch.tensor(X.codice.values), list(splits))
-seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
-labels = torch.split(torch.tensor(X.y.values), list(splits))
-# Since they are all equal.
-labels = [t[0] for t in labels]
-del s, indexes, tot, splits
+	# NOTE: We could add a feature that represents the table from which the data
+	# comes from.
 
-split = int(len(labels)*.8) # 80% of the data
-train_codes = codes[:split]
-train_seniorities = seniorities[:split]
-train_labels = labels[:split]
-test_codes = codes[split:]
-test_seniorities = seniorities[split:]
-test_labels = labels[split:]
-assert len(train_codes) + len(test_codes) == len(codes)
-assert len(train_seniorities) + len(test_seniorities) == len(seniorities)
-assert len(train_labels) + len(test_labels) == len(labels)
-del split
+	# Here we create a tensor for the history of each patients.
+	# TODO: put some assertions to verify that this split is correct.
+	s = X.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
+	indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
+	tot = len(X)
+	splits = numpy.concatenate([indexes[:1], numpy.diff(indexes)])
+	splits = numpy.concatenate([splits, numpy.array([tot - splits.sum()])])
+	assert splits.sum() == tot
+	codes = torch.split(torch.tensor(X.codice.values), list(splits))
+	seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
+	labels = torch.split(torch.tensor(X.y.values), list(splits))
+	# Since they are all equal.
+	labels = [t[0] for t in labels]
+	del s, indexes, tot, splits
 
-class TensorListDataset(torch.utils.data.Dataset):
+	split = int(len(labels)*.8) # 80% of the data
+	train_codes = codes[:split]
+	train_seniorities = seniorities[:split]
+	train_labels = labels[:split]
+	test_codes = codes[split:]
+	test_seniorities = seniorities[split:]
+	test_labels = labels[split:]
+	assert len(train_codes) + len(test_codes) == len(codes)
+	assert len(train_seniorities) + len(test_seniorities) == len(seniorities)
+	assert len(train_labels) + len(test_labels) == len(labels)
+	del split
 
-	def __init__(self, *tensors_lists) -> None:
-		lengths = [len(tensors_list) for tensors_list in tensors_lists]
-		if not all(lengths[0] == length for length in lengths):
-			raise ValueError("All lists of tensors must have the same length.")
-		# NOTE: all list should contain only tensors.
-		self.tensors_lists = tensors_lists
+	class TensorListDataset(torch.utils.data.Dataset):
 
-	def __len__(self) -> int:
-		return len(self.tensors_lists[0])
+		def __init__(self, *tensors_lists) -> None:
+			lengths = [len(tensors_list) for tensors_list in tensors_lists]
+			if not all(lengths[0] == length for length in lengths):
+				raise ValueError("All lists of tensors must have the same length.")
+			# NOTE: all list should contain only tensors.
+			self.tensors_lists = tensors_lists
 
-	def __getitem__(self, index):
-		return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
+		def __len__(self) -> int:
+			return len(self.tensors_lists[0])
 
-train_dataset = TensorListDataset(train_seniorities, train_codes, train_labels)
-test_dataset = TensorListDataset(test_seniorities, test_codes, test_labels)
+		def __getitem__(self, index):
+			return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
 
-def collate_fn(batch):
-	seniorities = torch.nn.utils.rnn.pad_sequence(
-		[seniority for seniority, _, _ in batch],
-		batch_first=True,
-		padding_value=0.0
+	train_dataset = TensorListDataset(train_seniorities, train_codes, train_labels)
+	test_dataset = TensorListDataset(test_seniorities, test_codes, test_labels)
+
+	def collate_fn(batch):
+		seniorities = torch.nn.utils.rnn.pad_sequence(
+			[seniority for seniority, _, _ in batch],
+			batch_first=True,
+			padding_value=0.0
+		)
+		codes = torch.nn.utils.rnn.pad_sequence([code for _, code, _ in batch], True, 0)
+		labels = torch.tensor([label for _, _, label in batch])
+		return seniorities, codes, labels
+
+	train_dataloader = torch.utils.data.DataLoader(
+		dataset=train_dataset,
+		batch_size=batch_size,
+		shuffle=True,
+		collate_fn=collate_fn
 	)
-	codes = torch.nn.utils.rnn.pad_sequence([code for _, code, _ in batch], True, 0)
-	labels = torch.tensor([label for _, _, label in batch])
-	return seniorities, codes, labels
+	test_dataloader = torch.utils.data.DataLoader(
+		dataset=test_dataset,
+		batch_size=batch_size,
+		shuffle=True,
+		collate_fn=collate_fn
+	)
 
-train_dataloader = torch.utils.data.DataLoader(
-	dataset=train_dataset,
-	batch_size=batch_size,
-	shuffle=True,
-	collate_fn=collate_fn
-)
-test_dataloader = torch.utils.data.DataLoader(
-	dataset=test_dataset,
-	batch_size=batch_size,
-	shuffle=True,
-	collate_fn=collate_fn
-)
+	class Model(torch.nn.Module):
 
-class Model(torch.nn.Module):
+		def __init__(
+				self,
+				num_embeddings: int,
+				embedding_dim: int,
+				lstm_hidden_size: int,
+				lstm_num_layers: int,
+				lstm_bias: bool,
+				lstm_batch_first: bool,
+				lstm_dropout: float,
+				lstm_bidirectional: bool,
+				lstm_proj_size: int
+			) -> None:
+			super().__init__()
 
-	def __init__(
-			self,
-			num_embeddings: int,
-			embedding_dim: int,
-			lstm_hidden_size: int,
-			lstm_num_layers: int,
-			lstm_bias: bool,
-			lstm_batch_first: bool,
-			lstm_dropout: float,
-			lstm_bidirectional: bool,
-			lstm_proj_size: int
-		) -> None:
-		super().__init__()
+			self.codes_embeddings = torch.nn.Embedding(
+				num_embeddings, embedding_dim, padding_idx=0
+			)
 
-		self.codes_embeddings = torch.nn.Embedding(
-			num_embeddings, embedding_dim, padding_idx=0
-		)
+			self.lstm = torch.nn.LSTM(
+				embedding_dim + 1, # The additional dimension is for seniority.,
+				lstm_hidden_size,
+				lstm_num_layers,
+				lstm_bias,
+				lstm_batch_first,
+				lstm_dropout,
+				lstm_bidirectional,
+				lstm_proj_size
+			)
 
-		self.lstm = torch.nn.LSTM(
-			embedding_dim + 1, # The additional dimension is for seniority.,
-			lstm_hidden_size,
-			lstm_num_layers,
-			lstm_bias,
-			lstm_batch_first,
-			lstm_dropout,
-			lstm_bidirectional,
-			lstm_proj_size
-		)
+			# if lstm_bidirectional the input size doubles
+			classifier_input_size = 2*lstm_hidden_size if lstm_bidirectional \
+				else lstm_hidden_size
+			self.classifier = torch.nn.Sequential(
+				torch.nn.Linear(classifier_input_size, classifier_input_size//2),
+				torch.nn.ReLU(),
+				torch.nn.Linear(classifier_input_size//2, 1)
+			)
 
-		# if lstm_bidirectional the input size doubles
-		classifier_input_size = 2*lstm_hidden_size if lstm_bidirectional \
-			else lstm_hidden_size
-		self.classifier = torch.nn.Sequential(
-			torch.nn.Linear(classifier_input_size, classifier_input_size//2),
-			torch.nn.ReLU(),
-			torch.nn.Linear(classifier_input_size//2, 1)
-		)
+		def forward(
+				self,
+				X_seniority: torch.Tensor,
+				X_codes: torch.Tensor,
+			) -> torch.Tensor:
+			assert X_seniority.shape[:2] == X_codes.shape[:2]
 
-	def forward(
-			self,
-			X_seniority: torch.Tensor,
-			X_codes: torch.Tensor,
-		) -> torch.Tensor:
-		assert X_seniority.shape[:2] == X_codes.shape[:2]
+			X_codes_embeddings = self.codes_embeddings(X_codes)
+			assert X_codes_embeddings.dtype == X_seniority.dtype
+			# batch, len, dim
+			X = torch.cat([X_seniority.unsqueeze(2), X_codes_embeddings], 2)
 
-		X_codes_embeddings = self.codes_embeddings(X_codes)
-		assert X_codes_embeddings.dtype == X_seniority.dtype
-		# batch, len, dim
-		X = torch.cat([X_seniority.unsqueeze(2), X_codes_embeddings], 2)
+			o, (h, c) = self.lstm(X)
 
-		o, (h, c) = self.lstm(X)
+			res = self.classifier(h) # logits
 
-		res = self.classifier(h) # logits
+			return res
 
-		return res
+	net = Model(
+		num_embeddings=len(codes),
+		embedding_dim=50,
+		lstm_hidden_size=20,
+		lstm_num_layers=1,
+		lstm_bias=True,
+		lstm_batch_first=True,
+		lstm_dropout=0.1, # Probability of removing.
+		lstm_bidirectional=False,
+		lstm_proj_size=0 # I don't know what this does.
+	)
+	print(net)
 
-net = Model(
-	num_embeddings=len(codes),
-	embedding_dim=50,
-	lstm_hidden_size=20,
-	lstm_num_layers=1,
-	lstm_bias=True,
-	lstm_batch_first=True,
-	lstm_dropout=0.1, # Probability of removing.
-	lstm_bidirectional=False,
-	lstm_proj_size=0 # I don't know what this does.
-)
-print(net)
+	def train(
+			net: torch.nn.Module,
+			epochs: int,
+			patience: int,
+			train_dataloader: torch.utils.data.DataLoader,
+			logit_normalizer: torch.nn.Module,
+			label_postproc: torch.nn.Module,
+			criterion: torch.nn.Module,
+			optimizer, # no type here :( torch.optimizer.Optimizer
+			test_dataloader: torch.utils.data.DataLoader
+		) -> float:
+		patience_kept = 0
+		best_epoch = 0
+		best_accuracy = float('-inf')
 
-def train(
-		net: torch.nn.Module,
-		epochs: int,
-		patience: int,
-		train_dataloader: torch.utils.data.DataLoader,
-		logit_normalizer: torch.nn.Module,
-		label_postproc: torch.nn.Module,
-		criterion: torch.nn.Module,
-		optimizer, # no type here :( torch.optimizer.Optimizer
-		test_dataloader: torch.utils.data.DataLoader
-	) -> float:
-	patience_kept = 0
-	best_epoch = 0
-	best_accuracy = float('-inf')
+		for epoch in range(epochs):
+			if patience_kept >= patience: break
 
-	for epoch in range(epochs):
-		if patience_kept >= patience: break
+			net.train()
+			losses: list[float] = []
+			for i, (seniorities, codes, labels) in enumerate(train_dataloader):
+				# NOTE: should tensors be moved here to device instead of a priori?
+				seniorities: torch.Tensor
+				codes: torch.Tensor
+				labels: torch.Tensor
 
-		net.train()
-		losses: list[float] = []
-		for i, (seniorities, codes, labels) in enumerate(train_dataloader):
-			# NOTE: should tensors be moved here to device instead of a priori?
-			seniorities: torch.Tensor
-			codes: torch.Tensor
-			labels: torch.Tensor
-
-			logits = net(seniorities, codes)
-			predictions = logit_normalizer(logits)
-
-			loss = criterion(predictions.squeeze(), label_postproc(labels).to(torch.float32).squeeze())
-			losses.append(loss.item())
-
-			loss.backward()
-
-			optimizer.step()
-			optimizer.zero_grad()
-		avg_loss = torch.mean(torch.tensor(losses))
-
-		net.eval()
-		correct = 0
-		with torch.no_grad():
-			for seniorities, codes, labels in test_dataloader:
 				logits = net(seniorities, codes)
-				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+				predictions = logit_normalizer(logits)
 
-				# assert (predictions < N_CLASSES).all()
-				# assert (labels < N_CLASSES).all()
-				# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
+				loss = criterion(predictions.squeeze(), label_postproc(labels).to(torch.float32).squeeze())
+				losses.append(loss.item())
 
-				correct += (predictions == labels).sum().item()
-		accuracy = correct/len(test_dataloader.dataset)
-		assert accuracy <= 1.0
+				loss.backward()
 
-		if accuracy > best_accuracy:
-			patience_kept = 0
-			# best_params = net.params()
-			best_epoch = epoch
-			best_accuracy = accuracy
-			marker = ' *'
-		else:
-			patience_kept += 1
-			marker = ''
+				optimizer.step()
+				optimizer.zero_grad()
+			avg_loss = torch.mean(torch.tensor(losses))
 
-		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+			net.eval()
+			correct = 0
+			with torch.no_grad():
+				for seniorities, codes, labels in test_dataloader:
+					logits = net(seniorities, codes)
+					predictions = (logit_normalizer(logits) > 0.5).squeeze()
 
-	print(f'{best_epoch=} {best_accuracy=:.3f}')
-	return best_accuracy
+					# assert (predictions < N_CLASSES).all()
+					# assert (labels < N_CLASSES).all()
+					# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
 
-_ = train(
-	net,
-	100,
-	50,
-	train_dataloader,
-	torch.nn.Softmax(dim=1),
-	torch.nn.Identity(),
-	torch.nn.BCELoss(),
-	torch.optim.SGD(net.parameters(), lr=0.01),
-	test_dataloader
-)
-sen, cod, target = next(iter(train_dataloader))
-logits = net(sen, cod)
+					correct += (predictions == labels).sum().item()
+			accuracy = correct/len(test_dataloader.dataset)
+			assert accuracy <= 1.0
+
+			if accuracy > best_accuracy:
+				patience_kept = 0
+				# best_params = net.params()
+				best_epoch = epoch
+				best_accuracy = accuracy
+				marker = ' *'
+			else:
+				patience_kept += 1
+				marker = ''
+
+			print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+
+		print(f'{best_epoch=} {best_accuracy=:.3f}')
+		return best_accuracy
+
+	_ = train(
+		net,
+		100,
+		50,
+		train_dataloader,
+		torch.nn.Softmax(dim=1),
+		torch.nn.Identity(),
+		torch.nn.BCELoss(),
+		torch.optim.SGD(net.parameters(), lr=0.01),
+		test_dataloader
+	)
+	sen, cod, target = next(iter(train_dataloader))
+	logits = net(sen, cod)
+
+if which_model_to_use == 'BERT' or which_model_to_use == 'both':
+	# Used for conversion of a patient history from a dataframe to a string.
+	amd = pandas.read_csv('data/amd_codes_for_bert.csv').rename({'codice': 'codiceamd'}, axis=1)
+	atc = pandas.read_csv('data/atc_info_nodup.csv')
+
+	# devo generare i dati per BERT.
+	# 1. devo mettere tutti i dati in una singola tabella dove valore è sempre una
+	#    stringa/ogetto.
+	# 2. fare il join con la tabella per eliminare i codici amd senza descrizione
+	#    testuale.
+	# 3. ordinare tutti gli eventi per paziente e cronologicamente.
+	# 4. trasformare la storia di un paziente in una stringa usando sia la
+	#    descrizione che il valore. Questo può essere fatto alla bisogna nel ciclo
+	#    di addestramento. Ogni singolo evento va separato da un punto perchè come
+	#    carattere non è presente nelle descrizioni.
+	# assert not amd.meaning.str.contains('\.').any()
+	# Questo non tiene conto dei codici ATC.
+	# I numeri non sono trattati in modo speciale: https://arxiv.org/abs/1909.07940
+
+	# The NA are just 21. `atc_nome` is the active ingredient.
+	odd_table = prescrizionidiabetefarmaci \
+		.merge(atc[['codiceatc', 'atc_nome']], 'inner', 'codiceatc') \
+		[['idcentro', 'idana', 'data', 'codiceatc', 'quantita', 'atc_nome']] \
+		.dropna(subset=['atc_nome']) \
+		.rename({'atc_nome': 'meaning',
+		         'quantita': 'valore',
+		         'codiceatc': 'codiceamd'}, axis=1)
+	assert not odd_table.isna().any().any()
+
+	# Some codiceamd have as valore a codiceatc, they should be translated to
+	# their active ingredient.
+	all_tables = pandas.concat([
+		                          diagnosi[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+		         esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+		esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+		                  esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+		     prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+		            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd', 'valore']],
+	]).merge(amd, 'inner', 'codiceamd')
+	assert not all_tables.isna().any().any()
+
+	all_tables = pandas.concat([all_tables, odd_table]) \
+		.sort_values(['idcentro', 'idana', 'data']) \
+		.reset_index(drop=True)
+	del odd_table
+
+	# Assuming that this is the history of a patient.
+	hist = all_tables.iloc[:10]
+	'. '.join(hist.meaning + ' ' + hist.valore.astype('str')) + '.'
+
+	# Come do i dati in pasto a BERT?
+	# Devo generare il testo on the fly e lo posso dificere in batch
+	# i dati devono essere "tokenizzate" prima di darle in pasto a BERT

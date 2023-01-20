@@ -517,6 +517,9 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	with torch.no_grad():
 		res = model(**tokenized_input)
 
+	predicted_class_id = res.logits.argmax().item()
+	print(model.config.id2label[predicted_class_id])
+
 	# Come do i dati in pasto a BERT?
 	# Devo generare il testo on the fly e lo posso dificere in batch
 	# i dati devono essere "tokenizzate" prima di darle in pasto a BERT

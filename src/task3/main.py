@@ -19,21 +19,25 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-# Define the LSTM model
-class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_classes):
-        super(LSTM, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
+#each patient is represented by two tensors
+#TENSOR 1: contains only the macroevents of the patient, *with* timestamps 
+#TENSOR 2: contains only the microevents, without timesamps, processed by an invariant LSTM
+#they are later combined into a fully connected layer
+class MyModel(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(MyModel, self).__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.set2set = nn.Set2Set(input_size, processing_steps=2)
+        self.fc = nn.Linear(hidden_size + input_size, output_size)
 
-    def forward(self, x):
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
-        out, _ = self.lstm(x, (h0, c0))
-        out = self.fc(out[:, -1, :])
-        return out
+    def forward(self, x1, x2):
+        x1, _ = self.lstm(x1)
+        x1 = x1[-1]
+        x2 = self.set2set(x2)
+        x = torch.cat((x1, x2), dim=1)
+        x = self.fc(x)
+        return x
+
 
 # Define the objective function for Optuna
 def objective(trial):

@@ -450,24 +450,12 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	sen, cod, target = next(iter(train_dataloader))
 	logits = net(sen, cod)
 
+# [Fast dataframe split](https://stackoverflow.com/a/42550516).
+
 if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	# Used for conversion of a patient history from a dataframe to a string.
 	amd = pandas.read_csv('data/amd_codes_for_bert.csv').rename({'codice': 'codiceamd'}, axis=1)
 	atc = pandas.read_csv('data/atc_info_nodup.csv')
-
-	# devo generare i dati per BERT.
-	# 1. devo mettere tutti i dati in una singola tabella dove valore è sempre una
-	#    stringa/ogetto.
-	# 2. fare il join con la tabella per eliminare i codici amd senza descrizione
-	#    testuale.
-	# 3. ordinare tutti gli eventi per paziente e cronologicamente.
-	# 4. trasformare la storia di un paziente in una stringa usando sia la
-	#    descrizione che il valore. Questo può essere fatto alla bisogna nel ciclo
-	#    di addestramento. Ogni singolo evento va separato da un punto perchè come
-	#    carattere non è presente nelle descrizioni.
-	# assert not amd.meaning.str.contains('\.').any()
-	# Questo non tiene conto dei codici ATC.
-	# I numeri non sono trattati in modo speciale: https://arxiv.org/abs/1909.07940
 
 	# The NA are just 21. `atc_nome` is the active ingredient.
 	odd_table = prescrizionidiabetefarmaci \
@@ -491,17 +479,41 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	]).merge(amd, 'inner', 'codiceamd')
 	assert not all_tables.isna().any().any()
 
-	# NOTE: sorting may not be needed.
+	# Again this is a very inefficient way to add labels but is the easiest that
+	# comes to mind.
 	all_tables = pandas.concat([all_tables, odd_table]) \
+		.join(anagraficapazientiattivi.y, ['idcentro', 'idana']) \
 		.sort_values(['idcentro', 'idana', 'data']) \
 		.reset_index(drop=True)
 	del odd_table
 
-	# Assuming that groupby preserves the order
-	X =  tuple(all_tables.groupby(['idcentro', 'idana']))
+	# NOTE: This is not the correct way to do it since we could split in the
+	# middle  of some patient data. But having one strande data should not cause
+	# any major problem.
+	split = int(len(all_tables)*.8) # 80% of the data
+	train_tables = all_tables[:split]
+	test_tables = all_tables[split:]
+	assert len(train_tables) + len(test_tables) == len(all_tables)
 
-	x = X[123][1]
-	text = '. '.join(x.meaning + ' ' + x.valore.astype('str')) + '.'
+	# pandas.DataFrame.groupby preserves the order of rows within each group as
+	# stated here:
+	# https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.groupby.html
+
+	# We could create a dataset of strings using this expression
+	# all_tables.groupby(['idcentro', 'idana']).apply(
+	#    lambda df: '. '.join(df.meaning + ' ' + df.valore.astype('str')) + '.')
+	# but we can be a bit smarter and use less memory.
+
+	class GroupByDataset(torch.utils.data.IterableDataset):
+
+		def __init__(self, groupped_dataframe) -> None:
+			self.groupped_dataframe = groupped_dataframe
+
+		def __iter__(self):
+			return iter(self.groupped_dataframe)
+
+	train_dataset = GroupByDataset(train_tables.groupby(['idcentro', 'idana']))
+	test_dataset = GroupByDataset(test_tables.groupby(['idcentro', 'idana']))
 
 	import transformers
 
@@ -511,15 +523,24 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	model = transformers.BertForSequenceClassification.from_pretrained("data/pubmedbert/", config=config)
 	tokenizer = transformers.BertTokenizer.from_pretrained("data/pubmedbert/", truncation_side='left')
 
-	# Il modello non può prendere in input sequenze più lunghe di 512.
-	tokenized_input = tokenizer(text, return_tensors="pt", max_length=512,
-		truncation=True, padding=True)
+	assert not amd.meaning.str.contains('\.').any()
+	def collate_fn(batch):
+		strings = [
+			'. '.join(df.meaning + ' ' + df.valore.astype('str')) + '.'
+			for _, df in batch
+		]
+		labels = torch.tensor([df.y.iloc[0].item() for _, df in batch])
+		tokens = tokenizer(strings, return_tensors="pt", max_length=512,
+			truncation=True, padding=True)
+		return tokens, labels
+	dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=16,
+		collate_fn=collate_fn)
+	tokenized_input_batch, labels_batch = next(iter(dataloader))
+
 	with torch.no_grad():
-		res = model(**tokenized_input)
+		res = model(**tokenized_input_batch)
 
-	predicted_class_id = res.logits.argmax().item()
+	# Let's check the first id in the batch.
+	breakpoint()
+	predicted_class_id = res.logits.argmax(dim=1)[0].item()
 	print(model.config.id2label[predicted_class_id])
-
-	# Come do i dati in pasto a BERT?
-	# Devo generare il testo on the fly e lo posso dificere in batch
-	# i dati devono essere "tokenizzate" prima di darle in pasto a BERT

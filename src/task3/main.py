@@ -211,10 +211,10 @@ X_macro = X_macro.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}
 X_micro = X_micro.merge(codes).drop('codice', axis=1).rename({'index': 'codice'}, axis=1)
 assert len(X_micro) + len(X_macro) == len(X)
 
-#uguale = X_macro.merge(lucio)
-#lucio = X_micro[["idana","idcentro"]].drop_duplicates().reset_index(drop=True)
 unique_micro = X_micro[["idana","idcentro"]].drop_duplicates().reset_index(drop=True)
+X_macro = X_macro.merge(unique_micro, 'inner', ['idcentro', 'idana'])
 unique_macro = X_macro[["idana","idcentro"]].drop_duplicates().reset_index(drop=True)
+X_micro = X_micro.merge(unique_macro, 'inner', ['idcentro', 'idana'])
 
 # NOTE: this should be useless since we order again below.
 #X = X.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)

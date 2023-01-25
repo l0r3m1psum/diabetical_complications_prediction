@@ -316,18 +316,6 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	assert len(train_labels) + len(test_labels) == len(labels)
 	del split
 
-	class TensorListDataset(torch.utils.data.Dataset):
-		def __init__(self, *tensors_lists: torch.Tensor) -> None:
-			lengths = [len(tensors_list) for tensors_list in tensors_lists]
-			if not all(lengths[0] == length for length in lengths):
-				raise ValueError("All lists of tensors must have the same length.")
-			self.len = lengths[0]
-			self.tensors_lists = tensors_lists
-		def __len__(self) -> int:
-			return self.len
-		def __getitem__(self, index) -> tuple:
-			return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
-
 	class TensorDictDataset(torch.utils.data.Dataset):
 		def __init__(self, targets, **features_sequences_dict) -> None:
 			lengths = [len(tensors_list) for tensors_list in features_sequences_dict.values()]

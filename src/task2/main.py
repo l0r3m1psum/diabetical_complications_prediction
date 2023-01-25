@@ -13,7 +13,7 @@ del pool
 
 seed = 42
 rng = numpy.random.default_rng(seed)
-number_of_duplications = 3 # TODO: right now n-1 duplications are added to the data. This have to be changed.
+number_of_duplications = 6 # TODO: right now n-1 duplications are added to the data. This have to be changed.
 assert number_of_duplications > 0
 batch_size = 128
 torch.manual_seed(seed)
@@ -126,8 +126,6 @@ def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
 
 	return copied_positive_patients_df
 
-# TODO: find number_of_duplications such that the number of patients with label
-# y==1 is roughly the same as the ones with y==0.
 diagnosi = pandas.concat([diagnosi, naive_balancing(diagnosi)], ignore_index=True)
 esamilaboratorioparametri = pandas.concat([esamilaboratorioparametri, naive_balancing(esamilaboratorioparametri)], ignore_index=True)
 esamilaboratorioparametricalcolati = pandas.concat([esamilaboratorioparametricalcolati, naive_balancing(esamilaboratorioparametricalcolati)], ignore_index=True)
@@ -143,6 +141,8 @@ xx = xx.merge(bijection).drop(['iddup', 'idana'], axis=1) \
 	.rename({'index': 'idana'}, axis=1).set_index(['idcentro', 'idana'])
 # TODO: perturbate data in xx
 anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
+
+logging.info(f'The difference between y=1 and y=0 is {anagraficapazientiattivi.y.sum() - (~anagraficapazientiattivi.y).sum()}')
 
 assert len(diagnosi)                           == len(diagnosi                          .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
 assert len(esamilaboratorioparametri)          == len(esamilaboratorioparametri         .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
@@ -175,6 +175,77 @@ esamilaboratorioparametricalcolati.codiceamd.update(
 )
 assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
 esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
+
+def train_classifier(
+		net: torch.nn.Module,
+		epochs: int,
+		patience: int,
+		train_dataloader: torch.utils.data.DataLoader,
+		logit_normalizer: torch.nn.Module,
+		label_postproc: torch.nn.Module,
+		criterion: torch.nn.Module,
+		optimizer, # no type here :( torch.optimizer.Optimizer
+		test_dataloader: torch.utils.data.DataLoader
+	) -> float:
+	patience_kept = 0
+	best_epoch = 0
+	best_accuracy = float('-inf')
+
+	for epoch in range(epochs):
+		if patience_kept >= patience: break
+
+		net.train()
+		losses: list[float] = []
+		for i, (seniorities, codes, labels) in enumerate(train_dataloader):
+			# NOTE: should tensors be moved here to device instead of a priori?
+			seniorities: torch.Tensor
+			codes: torch.Tensor
+			labels: torch.Tensor
+
+			logits = net(seniorities, codes).squeeze()
+
+			predictions = logit_normalizer(logits)
+			labels = label_postproc(labels)
+
+			assert predictions.shape == labels.shape
+			loss = criterion(predictions, labels)
+			losses.append(loss.item())
+
+			loss.backward()
+
+			optimizer.step()
+			optimizer.zero_grad()
+		avg_loss = torch.mean(torch.tensor(losses))
+
+		net.eval()
+		correct = 0
+		with torch.no_grad():
+			for seniorities, codes, labels in test_dataloader:
+				logits = net(seniorities, codes)
+				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+
+				# assert (predictions < N_CLASSES).all()
+				# assert (labels < N_CLASSES).all()
+				# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
+
+				correct += (predictions == labels).sum().item()
+		accuracy = correct/len(test_dataloader.dataset)
+		assert accuracy <= 1.0
+
+		if accuracy > best_accuracy:
+			patience_kept = 0
+			# best_params = net.params()
+			best_epoch = epoch
+			best_accuracy = accuracy
+			marker = ' *'
+		else:
+			patience_kept += 1
+			marker = ''
+
+		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+
+	print(f'{best_epoch=} {best_accuracy=:.3f}')
+	return best_accuracy
 
 which_model_to_use = 'BERT'
 
@@ -306,7 +377,6 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				lstm_hidden_size: int,
 				lstm_num_layers: int,
 				lstm_bias: bool,
-				lstm_batch_first: bool,
 				lstm_dropout: float,
 				lstm_bidirectional: bool,
 				lstm_proj_size: int
@@ -317,6 +387,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				num_embeddings, embedding_dim, padding_idx=0
 			)
 
+			lstm_batch_first = True
 			self.lstm = torch.nn.LSTM(
 				embedding_dim + 1, # The additional dimension is for seniority.,
 				lstm_hidden_size,
@@ -328,8 +399,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				lstm_proj_size
 			)
 
-			# if lstm_bidirectional the input size doubles
-			classifier_input_size = 2*lstm_hidden_size if lstm_bidirectional \
+			classifier_input_size = lstm_proj_size if lstm_proj_size > 0 \
 				else lstm_hidden_size
 			self.classifier = torch.nn.Sequential(
 				torch.nn.Linear(classifier_input_size, classifier_input_size//2),
@@ -346,111 +416,107 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 
 			X_codes_embeddings = self.codes_embeddings(X_codes)
 			assert X_codes_embeddings.dtype == X_seniority.dtype
-			# batch, len, dim
+			# X.shape == (batch_size, seq_len, emb_dim)
 			X = torch.cat([X_seniority.unsqueeze(2), X_codes_embeddings], 2)
 
 			o, (h, c) = self.lstm(X)
+			# h.shape == (num_layers*(1+bidirectional), batch_size, hidden_size)
 
-			res = self.classifier(h) # logits
+			# We take in consideration only the outpur of the last LSTM layer.
+			res = self.classifier(h[-1]) # logits
 
 			return res
 
 	net = Model(
 		num_embeddings=len(codes),
-		embedding_dim=50,
-		lstm_hidden_size=20,
-		lstm_num_layers=1,
+		embedding_dim=100,
+		lstm_hidden_size=40,
+		lstm_num_layers=3,
 		lstm_bias=True,
-		lstm_batch_first=True,
 		lstm_dropout=0.1, # Probability of removing.
-		lstm_bidirectional=False,
+		lstm_bidirectional=True,
 		lstm_proj_size=0 # I don't know what this does.
 	)
 	print(net)
 
-	def train(
-			net: torch.nn.Module,
-			epochs: int,
-			patience: int,
-			train_dataloader: torch.utils.data.DataLoader,
-			logit_normalizer: torch.nn.Module,
-			label_postproc: torch.nn.Module,
-			criterion: torch.nn.Module,
-			optimizer, # no type here :( torch.optimizer.Optimizer
-			test_dataloader: torch.utils.data.DataLoader
-		) -> float:
-		patience_kept = 0
-		best_epoch = 0
-		best_accuracy = float('-inf')
-
-		for epoch in range(epochs):
-			if patience_kept >= patience: break
-
-			net.train()
-			losses: list[float] = []
-			for i, (seniorities, codes, labels) in enumerate(train_dataloader):
-				# NOTE: should tensors be moved here to device instead of a priori?
-				seniorities: torch.Tensor
-				codes: torch.Tensor
-				labels: torch.Tensor
-
-				logits = net(seniorities, codes)
-				predictions = logit_normalizer(logits)
-
-				loss = criterion(predictions.squeeze(), label_postproc(labels).to(torch.float32).squeeze())
-				losses.append(loss.item())
-
-				loss.backward()
-
-				optimizer.step()
-				optimizer.zero_grad()
-			avg_loss = torch.mean(torch.tensor(losses))
-
-			net.eval()
-			correct = 0
-			with torch.no_grad():
-				for seniorities, codes, labels in test_dataloader:
-					logits = net(seniorities, codes)
-					predictions = (logit_normalizer(logits) > 0.5).squeeze()
-
-					# assert (predictions < N_CLASSES).all()
-					# assert (labels < N_CLASSES).all()
-					# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
-
-					correct += (predictions == labels).sum().item()
-			accuracy = correct/len(test_dataloader.dataset)
-			assert accuracy <= 1.0
-
-			if accuracy > best_accuracy:
-				patience_kept = 0
-				# best_params = net.params()
-				best_epoch = epoch
-				best_accuracy = accuracy
-				marker = ' *'
-			else:
-				patience_kept += 1
-				marker = ''
-
-			print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
-
-		print(f'{best_epoch=} {best_accuracy=:.3f}')
-		return best_accuracy
-
-	_ = train(
+	_ = train_classifier(
 		net,
 		100,
 		50,
 		train_dataloader,
-		torch.nn.Softmax(dim=1),
-		torch.nn.Identity(),
+		torch.nn.Softmax(dim=0),
+		lambda x: x.to(torch.float32),
 		torch.nn.BCELoss(),
-		torch.optim.SGD(net.parameters(), lr=0.01),
+		torch.optim.SGD(net.parameters(), lr=0.001),
 		test_dataloader
 	)
-	sen, cod, target = next(iter(train_dataloader))
-	logits = net(sen, cod)
 
 # [Fast dataframe split](https://stackoverflow.com/a/42550516).
+# https://huggingface.co/docs/transformers/training#train-in-native-pytorch
+
+def train_classifier2(
+		net: torch.nn.Module,
+		epochs: int,
+		patience: int,
+		train_dataloader: torch.utils.data.DataLoader,
+		logit_normalizer: torch.nn.Module,
+		label_postproc: torch.nn.Module,
+		criterion: torch.nn.Module,
+		optimizer, # no type here :( torch.optimizer.Optimizer
+		test_dataloader: torch.utils.data.DataLoader
+	) -> float:
+	patience_kept = 0
+	best_epoch = 0
+	best_accuracy = float('-inf')
+
+	for epoch in range(epochs):
+		if patience_kept >= patience: break
+
+		net.train()
+		losses: list[float] = []
+		for i, (X, Y) in enumerate(train_dataloader):
+
+			logits = net(**X).logits
+			# breakpoint()
+
+			predictions = logit_normalizer(logits)
+			Y = label_postproc(Y)
+
+			# assert predictions.shape == Y.shape
+			loss = criterion(predictions, Y)
+			print(loss.item())
+			losses.append(loss.item())
+
+			loss.backward()
+
+			optimizer.step()
+			optimizer.zero_grad()
+		avg_loss = torch.mean(torch.tensor(losses))
+
+		net.eval()
+		correct = 0
+		with torch.no_grad():
+			for X, Y in test_dataloader:
+				logits = net(**X)
+				Y_pred = logits.argmax(dim=1)
+				correct += (Y_pred == Y).sum().item()
+		accuracy = correct/len(test_dataloader.dataset)
+		assert accuracy <= 1.0
+
+		if accuracy > best_accuracy:
+			patience_kept = 0
+			# best_params = net.params()
+			best_epoch = epoch
+			best_accuracy = accuracy
+			marker = ' *'
+		else:
+			patience_kept += 1
+			marker = ''
+
+		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+
+	print(f'{best_epoch=} {best_accuracy=:.3f}')
+	return best_accuracy
 
 if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	# Used for conversion of a patient history from a dataframe to a string.
@@ -533,14 +599,27 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 		tokens = tokenizer(strings, return_tensors="pt", max_length=512,
 			truncation=True, padding=True)
 		return tokens, labels
-	dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=16,
+	train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=64,
 		collate_fn=collate_fn)
+	test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=64,
+		collate_fn=collate_fn)
+
+	_ = train_classifier2(
+		net=model,
+		epochs=3,
+		patience=2,
+		train_dataloader=train_dataloader,
+		logit_normalizer=torch.nn.Softmax(dim=1),
+		label_postproc=lambda x: x.to(torch.int64),
+		criterion=torch.nn.CrossEntropyLoss(),
+		optimizer=torch.optim.SGD(model.parameters(), lr=0.001), # no type here :( torch.optimizer.Optimizer
+		test_dataloader=test_dataloader
+	)
 	tokenized_input_batch, labels_batch = next(iter(dataloader))
 
 	with torch.no_grad():
 		res = model(**tokenized_input_batch)
 
 	# Let's check the first id in the batch.
-	breakpoint()
 	predicted_class_id = res.logits.argmax(dim=1)[0].item()
 	print(model.config.id2label[predicted_class_id])

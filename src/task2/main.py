@@ -209,6 +209,7 @@ def train_classifier(
 
 			assert predictions.shape == labels.shape
 			loss = criterion(predictions, labels)
+			print(loss.item())
 			losses.append(loss.item())
 
 			loss.backward()
@@ -247,7 +248,7 @@ def train_classifier(
 	print(f'{best_epoch=} {best_accuracy=:.3f}')
 	return best_accuracy
 
-which_model_to_use = 'BERT'
+which_model_to_use = 'LSTM'
 
 if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	# For LSTMs the only reasonable way to use all the tables is to drop the
@@ -328,19 +329,31 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	del split
 
 	class TensorListDataset(torch.utils.data.Dataset):
-
-		def __init__(self, *tensors_lists) -> None:
+		def __init__(self, *tensors_lists: torch.Tensor) -> None:
 			lengths = [len(tensors_list) for tensors_list in tensors_lists]
 			if not all(lengths[0] == length for length in lengths):
 				raise ValueError("All lists of tensors must have the same length.")
-			# NOTE: all list should contain only tensors.
+			self.len = lengths[0]
 			self.tensors_lists = tensors_lists
-
 		def __len__(self) -> int:
-			return len(self.tensors_lists[0])
-
-		def __getitem__(self, index):
+			return self.len
+		def __getitem__(self, index) -> tuple:
 			return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
+
+	class TensorDictDataset(torch.utils.data.Dataset):
+		def __init__(self, targets, **features_sequences_dict) -> None:
+			lengths = [len(tensors_list) for tensors_list in features_sequences_dict.values()]
+			lengths.append(len(targets))
+			if not all(lengths[0] == length for length in lengths):
+				raise ValueError("All features must have the same length.")
+			self.len = lengths[0]
+			self.targets = targets
+			self.features_sequences_dict: dict = features_sequences_dict
+		def __len__(self) -> int: return self.len
+		def __getitem__(self, index) -> tuple:
+			features = {key: tensors_list[index]
+				for key, tensors_list in self.features_sequences_dict.items()}
+			return features, self.targets[index]
 
 	train_dataset = TensorListDataset(train_seniorities, train_codes, train_labels)
 	test_dataset = TensorListDataset(test_seniorities, test_codes, test_labels)
@@ -368,7 +381,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 		collate_fn=collate_fn
 	)
 
-	class Model(torch.nn.Module):
+	class LSTM(torch.nn.Module):
 
 		def __init__(
 				self,
@@ -379,7 +392,9 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				lstm_bias: bool,
 				lstm_dropout: float,
 				lstm_bidirectional: bool,
-				lstm_proj_size: int
+				lstm_proj_size: int,
+				has_seniority: bool,
+				has_interval: bool
 			) -> None:
 			super().__init__()
 
@@ -389,7 +404,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 
 			lstm_batch_first = True
 			self.lstm = torch.nn.LSTM(
-				embedding_dim + 1, # The additional dimension is for seniority.,
+				embedding_dim + has_seniority + has_interval,
 				lstm_hidden_size,
 				lstm_num_layers,
 				lstm_bias,
@@ -407,10 +422,13 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				torch.nn.Linear(classifier_input_size//2, 1)
 			)
 
+		# Devo supportare T-LSTM, LSTM e aggiungere una feature per modellare
+		# gli intervalli non uniformi.
 		def forward(
 				self,
 				X_seniority: torch.Tensor,
 				X_codes: torch.Tensor,
+				X_interval: torch.Tensor = None
 			) -> torch.Tensor:
 			assert X_seniority.shape[:2] == X_codes.shape[:2]
 
@@ -427,7 +445,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 
 			return res
 
-	net = Model(
+	net = LSTM(
 		num_embeddings=len(codes),
 		embedding_dim=100,
 		lstm_hidden_size=40,
@@ -435,7 +453,9 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 		lstm_bias=True,
 		lstm_dropout=0.1, # Probability of removing.
 		lstm_bidirectional=True,
-		lstm_proj_size=0 # I don't know what this does.
+		lstm_proj_size=0, # I don't know what this does.
+		has_seniority=True,
+		has_interval=False
 	)
 	print(net)
 

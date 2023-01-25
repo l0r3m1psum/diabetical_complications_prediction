@@ -183,6 +183,7 @@ def train_classifier(
 		train_dataloader: torch.utils.data.DataLoader,
 		logit_normalizer: torch.nn.Module,
 		label_postproc: torch.nn.Module,
+		get_prediction, # a callable
 		criterion: torch.nn.Module,
 		optimizer, # no type here :( torch.optimizer.Optimizer
 		test_dataloader: torch.utils.data.DataLoader
@@ -197,7 +198,7 @@ def train_classifier(
 		net.train()
 		losses: list[float] = []
 		for i, (X, Y) in enumerate(train_dataloader):
-			logits = net(**X).squeeze()
+			logits = net(**X)
 			predictions = logit_normalizer(logits)
 			Y = label_postproc(Y)
 
@@ -215,7 +216,7 @@ def train_classifier(
 		with torch.no_grad():
 			for X, Y in test_dataloader:
 				logits = net(**X)
-				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+				predictions = get_prediction(logits)
 				correct += (predictions == Y).sum().item()
 		accuracy = correct/len(test_dataloader.dataset)
 		assert accuracy <= 1.0
@@ -235,7 +236,7 @@ def train_classifier(
 	print(f'{best_epoch=} {best_accuracy=:.3f}')
 	return best_accuracy
 
-which_model_to_use = 'LSTM'
+which_model_to_use = 'BERT'
 
 if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	# For LSTMs the only reasonable way to use all the tables is to drop the
@@ -454,84 +455,22 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	)
 	print(net)
 
+	logit_normalizer = lambda x: torch.nn.functional.softmax(x.squeeze(), dim=0)
 	_ = train_classifier(
-		net,
-		1,
-		1,
-		train_dataloader,
-		torch.nn.Softmax(dim=0),
-		lambda x: x.to(torch.float32),
-		torch.nn.BCELoss(),
-		torch.optim.SGD(net.parameters(), lr=0.001),
-		test_dataloader
+		net=net,
+		epochs=1,
+		patience=1,
+		train_dataloader=train_dataloader,
+		logit_normalizer=logit_normalizer,
+		label_postproc=lambda x: x.to(torch.float32),
+		get_prediction=lambda logits: (logit_normalizer(logits) > 0.5).squeeze(),
+		criterion=torch.nn.BCELoss(),
+		optimizer=torch.optim.SGD(net.parameters(), lr=0.001),
+		test_dataloader=test_dataloader
 	)
 
 # [Fast dataframe split](https://stackoverflow.com/a/42550516).
 # https://huggingface.co/docs/transformers/training#train-in-native-pytorch
-
-def train_classifier2(
-		net: torch.nn.Module,
-		epochs: int,
-		patience: int,
-		train_dataloader: torch.utils.data.DataLoader,
-		logit_normalizer: torch.nn.Module,
-		label_postproc: torch.nn.Module,
-		criterion: torch.nn.Module,
-		optimizer, # no type here :( torch.optimizer.Optimizer
-		test_dataloader: torch.utils.data.DataLoader
-	) -> float:
-	patience_kept = 0
-	best_epoch = 0
-	best_accuracy = float('-inf')
-
-	for epoch in range(epochs):
-		if patience_kept >= patience: break
-
-		net.train()
-		losses: list[float] = []
-		for i, (X, Y) in enumerate(train_dataloader):
-
-			logits = net(**X).logits
-			# breakpoint()
-
-			predictions = logit_normalizer(logits)
-			Y = label_postproc(Y)
-
-			# assert predictions.shape == Y.shape
-			loss = criterion(predictions, Y)
-			print(loss.item())
-			losses.append(loss.item())
-
-			loss.backward()
-
-			optimizer.step()
-			optimizer.zero_grad()
-		avg_loss = torch.mean(torch.tensor(losses))
-
-		net.eval()
-		correct = 0
-		with torch.no_grad():
-			for X, Y in test_dataloader:
-				logits = net(**X)
-				Y_pred = logits.argmax(dim=1)
-				correct += (Y_pred == Y).sum().item()
-		accuracy = correct/len(test_dataloader.dataset)
-		assert accuracy <= 1.0
-
-		if accuracy > best_accuracy:
-			patience_kept = 0
-			# best_params = net.params()
-			best_epoch = epoch
-			best_accuracy = accuracy
-			marker = ' *'
-		else:
-			patience_kept += 1
-			marker = ''
-
-		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
-
-	print(f'{best_epoch=} {best_accuracy=:.3f}')
-	return best_accuracy
 
 if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	# Used for conversion of a patient history from a dataframe to a string.
@@ -619,13 +558,14 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 	test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=64,
 		collate_fn=collate_fn)
 
-	_ = train_classifier2(
+	_ = train_classifier(
 		net=model,
-		epochs=3,
-		patience=2,
+		epochs=1,
+		patience=1,
 		train_dataloader=train_dataloader,
-		logit_normalizer=torch.nn.Softmax(dim=1),
+		logit_normalizer=lambda x: torch.nn.functional.softmax(x.squeeze(), dim=1),
 		label_postproc=lambda x: x.to(torch.int64),
+		get_prediction=lambda logits: logits.argmax(dim=1),
 		criterion=torch.nn.CrossEntropyLoss(),
 		optimizer=torch.optim.SGD(model.parameters(), lr=0.001), # no type here :( torch.optimizer.Optimizer
 		test_dataloader=test_dataloader

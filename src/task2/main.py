@@ -236,7 +236,7 @@ def train_classifier(
 	print(f'{best_epoch=} {best_accuracy=:.3f}')
 	return best_accuracy
 
-which_model_to_use = 'BERT'
+which_model_to_use = 'LSTM'
 
 if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	# For LSTMs the only reasonable way to use all the tables is to drop the
@@ -299,6 +299,9 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	assert splits.sum() == tot
 	codes = torch.split(torch.tensor(X.codice.values), list(splits))
 	seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
+	# intervals are used for Point 3
+	intervals = [numpy.concatenate([numpy.zeros(1), numpy.diff(seniority)]) for seniority in seniorities]
+	assert all(len(a) == len(b) for a, b in zip(seniorities, intervals))
 	labels = torch.split(torch.tensor(X.y.values), list(splits))
 	# Since they are all equal.
 	labels = [t[0] for t in labels]
@@ -307,12 +310,15 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	split = int(len(labels)*.8) # 80% of the data
 	train_codes = codes[:split]
 	train_seniorities = seniorities[:split]
+	train_intervals = intervals[:split]
 	train_labels = labels[:split]
 	test_codes = codes[split:]
 	test_seniorities = seniorities[split:]
+	test_intervals = intervals[split:]
 	test_labels = labels[split:]
 	assert len(train_codes) + len(test_codes) == len(codes)
 	assert len(train_seniorities) + len(test_seniorities) == len(seniorities)
+	assert len(train_intervals) + len(test_intervals) == len(intervals)
 	assert len(train_labels) + len(test_labels) == len(labels)
 	del split
 
@@ -541,6 +547,7 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 		tokens = tokenizer(strings, return_tensors="pt", max_length=512,
 			truncation=True, padding=True)
 		return tokens, labels
+	# TODO: shuffle train data.
 	train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=64,
 		collate_fn=collate_fn)
 	test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=64,

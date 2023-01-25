@@ -181,8 +181,8 @@ def train_classifier(
 		epochs: int,
 		patience: int,
 		train_dataloader: torch.utils.data.DataLoader,
-		logit_normalizer: torch.nn.Module,
-		label_postproc: torch.nn.Module,
+		logit_normalizer, # a callable
+		label_postproc, # a callable
 		get_prediction, # a callable
 		criterion: torch.nn.Module,
 		optimizer, # no type here :( torch.optimizer.Optimizer
@@ -358,7 +358,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	test_dataloader = torch.utils.data.DataLoader(
 		dataset=test_dataset,
 		batch_size=batch_size,
-		shuffle=True,
+		shuffle=False,
 		collate_fn=collate_fn
 	)
 

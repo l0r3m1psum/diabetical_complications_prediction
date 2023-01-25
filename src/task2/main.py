@@ -570,11 +570,3 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 		optimizer=torch.optim.SGD(model.parameters(), lr=0.001), # no type here :( torch.optimizer.Optimizer
 		test_dataloader=test_dataloader
 	)
-	tokenized_input_batch, labels_batch = next(iter(dataloader))
-
-	with torch.no_grad():
-		res = model(**tokenized_input_batch)
-
-	# Let's check the first id in the batch.
-	predicted_class_id = res.logits.argmax(dim=1)[0].item()
-	print(model.config.id2label[predicted_class_id])

@@ -14,3 +14,4 @@ six==1.16.0
 torch==1.13.1
 typing_extensions==4.4.0
 optuna==2.10.1
+transformers==2.1.0

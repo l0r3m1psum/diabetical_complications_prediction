@@ -196,24 +196,16 @@ def train_classifier(
 
 		net.train()
 		losses: list[float] = []
-		for i, (seniorities, codes, labels) in enumerate(train_dataloader):
-			# NOTE: should tensors be moved here to device instead of a priori?
-			seniorities: torch.Tensor
-			codes: torch.Tensor
-			labels: torch.Tensor
-
-			logits = net(seniorities, codes).squeeze()
-
+		for i, (X, Y) in enumerate(train_dataloader):
+			logits = net(**X).squeeze()
 			predictions = logit_normalizer(logits)
-			labels = label_postproc(labels)
+			Y = label_postproc(Y)
 
-			assert predictions.shape == labels.shape
-			loss = criterion(predictions, labels)
+			loss = criterion(predictions, Y)
 			print(loss.item())
 			losses.append(loss.item())
 
 			loss.backward()
-
 			optimizer.step()
 			optimizer.zero_grad()
 		avg_loss = torch.mean(torch.tensor(losses))
@@ -221,15 +213,10 @@ def train_classifier(
 		net.eval()
 		correct = 0
 		with torch.no_grad():
-			for seniorities, codes, labels in test_dataloader:
-				logits = net(seniorities, codes)
+			for X, Y in test_dataloader:
+				logits = net(**X)
 				predictions = (logit_normalizer(logits) > 0.5).squeeze()
-
-				# assert (predictions < N_CLASSES).all()
-				# assert (labels < N_CLASSES).all()
-				# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
-
-				correct += (predictions == labels).sum().item()
+				correct += (predictions == Y).sum().item()
 		accuracy = correct/len(test_dataloader.dataset)
 		assert accuracy <= 1.0
 
@@ -355,18 +342,23 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				for key, tensors_list in self.features_sequences_dict.items()}
 			return features, self.targets[index]
 
-	train_dataset = TensorListDataset(train_seniorities, train_codes, train_labels)
-	test_dataset = TensorListDataset(test_seniorities, test_codes, test_labels)
+	train_dataset = TensorDictDataset(train_labels, seniorities=train_seniorities, codes=train_codes)
+	test_dataset = TensorDictDataset(test_labels, seniorities=test_seniorities, codes=test_codes)
 
 	def collate_fn(batch):
 		seniorities = torch.nn.utils.rnn.pad_sequence(
-			[seniority for seniority, _, _ in batch],
+			[features['seniorities'] for features, _ in batch],
 			batch_first=True,
 			padding_value=0.0
 		)
-		codes = torch.nn.utils.rnn.pad_sequence([code for _, code, _ in batch], True, 0)
-		labels = torch.tensor([label for _, _, label in batch])
-		return seniorities, codes, labels
+		codes = torch.nn.utils.rnn.pad_sequence(
+			[features['codes'] for features, _ in batch],
+			batch_first=True,
+			padding_value=0
+		)
+		targets = torch.tensor([target for _, target in batch])
+		features = {'seniorities': seniorities, 'codes': codes}
+		return features, targets
 
 	train_dataloader = torch.utils.data.DataLoader(
 		dataset=train_dataset,
@@ -422,20 +414,23 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				torch.nn.Linear(classifier_input_size//2, 1)
 			)
 
-		# Devo supportare T-LSTM, LSTM e aggiungere una feature per modellare
-		# gli intervalli non uniformi.
 		def forward(
 				self,
-				X_seniority: torch.Tensor,
-				X_codes: torch.Tensor,
-				X_interval: torch.Tensor = None
+				*,
+				codes: torch.Tensor,
+				seniorities: torch.Tensor = None, # For the T-LSTM.
+				intervals: torch.Tensor = None # For irregular time intervals.
 			) -> torch.Tensor:
-			assert X_seniority.shape[:2] == X_codes.shape[:2]
+			assert seniorities.shape[:2] == codes.shape[:2]
 
-			X_codes_embeddings = self.codes_embeddings(X_codes)
-			assert X_codes_embeddings.dtype == X_seniority.dtype
+			codes_embeddings = self.codes_embeddings(codes)
+			assert codes_embeddings.dtype == seniorities.dtype
+			X = codes_embeddings
 			# X.shape == (batch_size, seq_len, emb_dim)
-			X = torch.cat([X_seniority.unsqueeze(2), X_codes_embeddings], 2)
+			if seniorities is not None:
+				X = torch.cat([seniorities.unsqueeze(2), X], 2)
+			if intervals is not None:
+				X = torch.cat([intervals.unsqueeze(2), X], 2)
 
 			o, (h, c) = self.lstm(X)
 			# h.shape == (num_layers*(1+bidirectional), batch_size, hidden_size)
@@ -461,8 +456,8 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 
 	_ = train_classifier(
 		net,
-		100,
-		50,
+		1,
+		1,
 		train_dataloader,
 		torch.nn.Softmax(dim=0),
 		lambda x: x.to(torch.float32),

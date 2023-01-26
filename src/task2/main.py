@@ -15,7 +15,8 @@ seed = 42
 rng = numpy.random.default_rng(seed)
 number_of_duplications = 6 # TODO: right now n-1 duplications are added to the data. This have to be changed.
 assert number_of_duplications > 0
-batch_size = 128
+# batch_size = 128
+batch_size = 16
 torch.manual_seed(seed)
 
 # Point 1
@@ -207,6 +208,7 @@ def train_classifier(
 			losses.append(loss.item())
 
 			loss.backward()
+			# torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=1, norm_type=2.0, error_if_nonfinite=False)
 			optimizer.step()
 			optimizer.zero_grad()
 		avg_loss = torch.mean(torch.tensor(losses))
@@ -300,7 +302,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	codes = torch.split(torch.tensor(X.codice.values), list(splits))
 	seniorities = torch.split(torch.tensor(X.seniority.values, dtype=torch.float32), list(splits))
 	# intervals are used for Point 3
-	intervals = [numpy.concatenate([numpy.zeros(1), numpy.diff(seniority)]) for seniority in seniorities]
+	intervals = [torch.cat([torch.zeros(1), torch.diff(seniority)]) for seniority in seniorities]
 	assert all(len(a) == len(b) for a, b in zip(seniorities, intervals))
 	labels = torch.split(torch.tensor(X.y.values), list(splits))
 	# Since they are all equal.
@@ -337,8 +339,8 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 				for key, tensors_list in self.features_sequences_dict.items()}
 			return features, self.targets[index]
 
-	train_dataset = TensorDictDataset(train_labels, seniorities=train_seniorities, codes=train_codes)
-	test_dataset = TensorDictDataset(test_labels, seniorities=test_seniorities, codes=test_codes)
+	train_dataset = TensorDictDataset(train_labels, seniorities=train_seniorities, codes=train_codes, intervals=train_intervals)
+	test_dataset = TensorDictDataset(test_labels, seniorities=test_seniorities, codes=test_codes, intervals=test_intervals)
 
 	def collate_fn(batch):
 		seniorities = torch.nn.utils.rnn.pad_sequence(
@@ -351,8 +353,13 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 			batch_first=True,
 			padding_value=0
 		)
+		intervals = torch.nn.utils.rnn.pad_sequence(
+			[features['intervals'] for features, _ in batch],
+			batch_first=True,
+			padding_value=0
+		)
 		targets = torch.tensor([target for _, target in batch])
-		features = {'seniorities': seniorities, 'codes': codes}
+		features = {'seniorities': seniorities, 'codes': codes, 'intervals': intervals}
 		return features, targets
 
 	train_dataloader = torch.utils.data.DataLoader(
@@ -435,6 +442,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 
 			return res
 
+	print(f'{len(codes)=}')
 	net = LSTM(
 		num_embeddings=len(codes),
 		embedding_dim=100,
@@ -445,7 +453,7 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 		lstm_bidirectional=True,
 		lstm_proj_size=0, # I don't know what this does.
 		has_seniority=True,
-		has_interval=False
+		has_interval=True
 	)
 	print(net)
 
@@ -562,6 +570,6 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 		label_postproc=lambda x: x.to(torch.int64),
 		get_prediction=lambda logits: logits.argmax(dim=1),
 		criterion=torch.nn.CrossEntropyLoss(),
-		optimizer=torch.optim.SGD(model.parameters(), lr=0.001), # no type here :( torch.optimizer.Optimizer
+		optimizer=torch.optim.SGD(model.parameters(), lr=0.001),
 		test_dataloader=test_dataloader
 	)

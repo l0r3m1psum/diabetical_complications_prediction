@@ -1,8 +1,7 @@
 import sys
 sys.path.append('src')
-
 import random
-
+import optuna
 from common import *
 import torch
 import numpy
@@ -14,14 +13,13 @@ del pool
 
 seed = 42
 rng = numpy.random.default_rng(seed)
-batch_size = 128
+batch_size = 32
 torch.manual_seed(seed)
 
 #loading the database
 X = pandas.read_pickle("data/X_clean.pickle.zip")
-print(X)
 
-#cleaning the data for the model
+#cleaning the data for the model#
 assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))
 X = X.join(anagraficapazientiattivi.y, ['idcentro', 'idana'])
 
@@ -240,18 +238,6 @@ class Model(torch.nn.Module):
 
 		return res
 
-net = Model(
-		num_embeddings=len(codes), 
-		embedding_dim=50,
-		lstm_hidden_size=20,
-		lstm_num_layers=1,
-		lstm_bias=True,
-		lstm_batch_first=True,
-		lstm_dropout=0.1, # Probability of removing.
-		lstm_bidirectional=False,
-		lstm_proj_size=0, # I don't know what this does.
-		mlp_output_size=20
-	)
 
 def train(
 		net: torch.nn.Module,
@@ -297,7 +283,7 @@ def train(
 		with torch.no_grad():
 			for seniorities, codes, micro_codes, labels in test_dataloader:
 				logits = net(seniorities, codes, micro_codes)
-				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+				predictions = (logit_normalizer(logits) < 0.5).squeeze() #it should be 0.5
 
 				# assert (predictions < N_CLASSES).all()
 				# assert (labels < N_CLASSES).all()
@@ -323,62 +309,46 @@ def train(
 	return best_accuracy
 
 
+def objective(trial):
 
-_ = train(
-	net,
-	50,
-	5,
-	train_dataloader,
-	torch.nn.Softmax(dim=1),
-	torch.nn.Identity(),
-	torch.nn.BCELoss(),
-	torch.optim.SGD(net.parameters(), lr=0.01),
-	test_dataloader
-)
+	embedding_dim = trial.suggest_int("embedding_dim", 50, 100, step=10)
+	lstm_hidden_size = trial.suggest_int("lstm_hidden_size", 8, 32, log=True)
+	lstm_num_layers = trial.suggest_int("lstm_num_layers", 2, 3)
+	lstm_dropout = trial.suggest_float("lstm_dropout", 0.1, 0.4, step=0.1)
+	mlp_output_size = trial.suggest_int("mlp_output_size", 10, 100, step=0.1)
 
+	net = Model(
+			num_embeddings=len(codes), 
+			embedding_dim=embedding_dim,
+			lstm_hidden_size=lstm_hidden_size,
+			lstm_num_layers=lstm_num_layers,
+			lstm_bias=True,
+			lstm_batch_first=True,
+			lstm_dropout=lstm_dropout,
+			lstm_bidirectional=False,
+			lstm_proj_size=0,
+			mlp_output_size=mlp_output_size
+		)
 
-import optuna
+	n_epochs = trial.suggest_int("n_epochs", 5, 25)
+	learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
 
-# Define the objective function for Optuna
-"""def objective(trial):
-    # Sample the hyperparameters
-    hidden_size = trial.suggest_int("hidden_size", 50, 300)
-    num_layers = trial.suggest_int("num_layers", 1, 3)
-    batch_size = trial.suggest_int("batch_size", 4, 64)
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    weight_decay = trial.suggest_loguniform("weight_decay", 1e-10, 1e-3)
-    num_epochs = trial.suggest_int("num_epochs", 10, 100)
-    
-    # Define the device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	accuracy = train(
+		net,
+		n_epochs,
+		4,
+		train_dataloader,
+		torch.nn.Softmax(dim=1),
+		torch.nn.Identity(),
+		torch.nn.BCELoss(),
+		torch.optim.SGD(net.parameters(), lr=learning_rate),
+		test_dataloader
+	)
 
-    # Define the model and move it to the device
-    model = LSTM(input_size, hidden_size, num_layers, num_classes).to(device)
+	return -accuracy
 
-    # Define the loss function and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-
-    # Define a DataLoader
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
-    
-    # Training loop
-    for epoch in range(num_epochs):
-        for inputs, labels in train_loader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-
-            # Forward pass
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-
-						#trial.report(loss, i+1)
-
-    		if trial.should_prune():
-      			raise optuna.TrialPruned()
-
-  	return loss
-           """
-#study = optuna.create_study(study_name="Task3")
-#study.optimize(objective, n_trials=15)"""
+study = optuna.create_study(study_name="Task3")
+study.optimize(objective, n_trials=10)
+best_params = study.best_params
+print("Best accuracy: ", -study.best_value)
+print("Best hyperparameters", best_params)

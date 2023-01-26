@@ -1,7 +1,6 @@
 import sys
 sys.path.append('src')
-import sys
-sys.path.append('src')
+
 import random
 
 from common import *
@@ -18,185 +17,11 @@ rng = numpy.random.default_rng(seed)
 batch_size = 128
 torch.manual_seed(seed)
 
-#####this will be sostituted by a load#######
-number_of_duplications = 3 # TODO: right now n-1 duplications are added to the data. This have to be changed.
-assert number_of_duplications > 0
+#loading the database
+X = pandas.read_pickle("data/X_clean.pickle.zip")
+print(X)
 
-# Point 1
-
-positive_patients = anagraficapazientiattivi[anagraficapazientiattivi.y].index.to_frame().reset_index(drop=True)
-
-all_events = pandas.concat([
-	diagnosi[['idcentro', 'idana', 'data']],
-	esamilaboratorioparametri[['idcentro', 'idana', 'data']],
-	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data']],
-	esamistrumentali[['idcentro', 'idana', 'data']],
-	prescrizionidiabetefarmaci[['idcentro', 'idana', 'data']],
-	prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data']],
-	prescrizioninondiabete[['idcentro', 'idana', 'data']],
-])
-last_event = all_events.groupby(['idcentro', 'idana'], group_keys=True).data.max()
-last_event_positive_patients = positive_patients.join(last_event, ['idcentro', 'idana'])
-
-#given a dataset, for patients with positive labels, delete events happened in the last six months
-def clean_last_six_months(df: pandas.DataFrame) -> pandas.DataFrame:
-	df_with_last_event_for_positive_patients = df.merge(last_event_positive_patients, 'left', ['idcentro', 'idana'])
-	assert (df_with_last_event_for_positive_patients.index == df.index).all()
-	# Here NaT do exactly what we need.
-	mask = df_with_last_event_for_positive_patients.data_x > df_with_last_event_for_positive_patients.data_y - pandas.DateOffset(months=6)
-	res = df.drop(mask[mask].index)
-	return res
-
-logging.info('Start of task 2.')
-
-logging.info(f'Before six months cleaning: {len(diagnosi)=}')
-diagnosi = clean_last_six_months(diagnosi)
-logging.info(f'After  six months cleaning: {len(diagnosi)=}')
-
-logging.info(f'Before six months cleaning: {len(esamilaboratorioparametri)=}')
-esamilaboratorioparametri = clean_last_six_months(esamilaboratorioparametri)
-logging.info(f'After  six months cleaning: {len(esamilaboratorioparametri)=}')
-
-logging.info(f'Before six months cleaning: {len(esamilaboratorioparametricalcolati)=}')
-esamilaboratorioparametricalcolati = clean_last_six_months(esamilaboratorioparametricalcolati)
-logging.info(f'After  six months cleaning: {len(esamilaboratorioparametricalcolati)=}')
-
-logging.info(f'Before six months cleaning: {len(esamistrumentali)=}')
-esamistrumentali = clean_last_six_months(esamistrumentali)
-logging.info(f'After  six months cleaning: {len(esamistrumentali)=}')
-
-logging.info(f'Before six months cleaning: {len(prescrizionidiabetefarmaci)=}')
-prescrizionidiabetefarmaci = clean_last_six_months(prescrizionidiabetefarmaci)
-logging.info(f'After  six months cleaning: {len(prescrizionidiabetefarmaci)=}')
-
-logging.info(f'Before six months cleaning: {len(prescrizionidiabetenonfarmaci)=}')
-prescrizionidiabetenonfarmaci = clean_last_six_months(prescrizionidiabetenonfarmaci)
-logging.info(f'After  six months cleaning: {len(prescrizionidiabetenonfarmaci)=}')
-
-logging.info(f'Before six months cleaning: {len(prescrizioninondiabete)=}')
-prescrizioninondiabete = clean_last_six_months(prescrizioninondiabete)
-logging.info(f'After  six months cleaning: {len(prescrizioninondiabete)=}')
-
-del all_events, last_event
-
-logging.info('Starting to balance the dataset.')
-
-assert (positive_patients == positive_patients.drop_duplicates()).all().all(), \
-	'there are duplicates in the positive patients'
-
-duplicated_positive_patients = []
-for i in range(number_of_duplications-1):
-	copy = positive_patients.copy()
-	copy['iddup'] = i
-	duplicated_positive_patients.append(copy)
-del copy, i
-duplicated_positive_patients = pandas.concat(duplicated_positive_patients, ignore_index=True)
-
-# This is a biijection to make sure that the new synthetic patients have unique
-# ids for each duplication. All indices for this new patients are negative to
-# easly distinguish them from the original ones. We are going to use 'index' to
-# set a new value for 'idana' (changing 'idcentro' would have been the same).
-bijection = duplicated_positive_patients.reset_index()
-bijection['index'] = -bijection['index'] - 1
-
-def naive_balancing(df: pandas.DataFrame) -> pandas.DataFrame:
-	"""This function does 5 things:
-	  1. duplicates the events for the positive patients in this dataframe
-	  2. removes some of this events
-	  3. perturbates the date of thi events
-	  6. cleans the last six months
-	  4. update the idana
-	"""
-	removed_frac = 0.01
-
-	copied_positive_patients_df = df.merge(duplicated_positive_patients, 'inner', ['idcentro', 'idana'])
-	assert 'iddup' in copied_positive_patients_df.columns
-	assert len(copied_positive_patients_df) == (number_of_duplications-1)*len(df.merge(positive_patients, 'inner', ['idcentro', 'idana']))
-
-	copied_positive_patients_df = copied_positive_patients_df.drop(
-		copied_positive_patients_df.sample(None, removed_frac, False, random_state=rng).index
-	).reset_index(drop=True)
-
-	offsets = rng.normal(0, 3, len(copied_positive_patients_df)).astype('int')
-	pert = pandas.to_timedelta(offsets, unit='d')
-	copied_positive_patients_df.data = copied_positive_patients_df.data + pert
-
-	copied_positive_patients_df = clean_last_six_months(copied_positive_patients_df).reset_index(drop=True)
-
-	assert pandas.MultiIndex.from_frame(copied_positive_patients_df[['idcentro', 'idana']]) \
-		.isin(pandas.MultiIndex.from_frame(bijection[['idcentro', 'idana']])).all()
-	copied_positive_patients_df = copied_positive_patients_df.merge(bijection) \
-		.drop(['iddup', 'idana'], axis=1).rename({'index': 'idana'}, axis=1)
-
-	return copied_positive_patients_df
-
-# TODO: find number_of_duplications such that the number of patients with label
-# y==1 is roughly the same as the ones with y==0.
-diagnosi = pandas.concat([diagnosi, naive_balancing(diagnosi)], ignore_index=True)
-esamilaboratorioparametri = pandas.concat([esamilaboratorioparametri, naive_balancing(esamilaboratorioparametri)], ignore_index=True)
-esamilaboratorioparametricalcolati = pandas.concat([esamilaboratorioparametricalcolati, naive_balancing(esamilaboratorioparametricalcolati)], ignore_index=True)
-esamistrumentali = pandas.concat([esamistrumentali, naive_balancing(esamistrumentali)], ignore_index=True)
-prescrizionidiabetefarmaci = pandas.concat([prescrizionidiabetefarmaci, naive_balancing(prescrizionidiabetefarmaci)], ignore_index=True)
-prescrizionidiabetenonfarmaci = pandas.concat([prescrizionidiabetenonfarmaci, naive_balancing(prescrizionidiabetenonfarmaci)], ignore_index=True)
-prescrizioninondiabete = pandas.concat([prescrizioninondiabete, naive_balancing(prescrizioninondiabete)], ignore_index=True)
-
-xx = duplicated_positive_patients.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner').reset_index(drop=True)
-assert len(xx) == len(duplicated_positive_patients)
-assert xx.y.all()
-xx = xx.merge(bijection).drop(['iddup', 'idana'], axis=1) \
-	.rename({'index': 'idana'}, axis=1).set_index(['idcentro', 'idana'])
-# TODO: perturbate data in xx
-anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
-
-assert len(diagnosi)                           == len(diagnosi                          .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(esamilaboratorioparametri)          == len(esamilaboratorioparametri         .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(esamilaboratorioparametricalcolati) == len(esamilaboratorioparametricalcolati.join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(esamistrumentali)                   == len(esamistrumentali                  .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(prescrizionidiabetefarmaci)         == len(prescrizionidiabetefarmaci        .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(prescrizionidiabetenonfarmaci)      == len(prescrizionidiabetenonfarmaci     .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-assert len(prescrizioninondiabete)             == len(prescrizioninondiabete            .join(anagraficapazientiattivi, ['idcentro', 'idana'], 'inner'))
-
-del xx, naive_balancing, bijection, duplicated_positive_patients, \
-	last_event_positive_patients, clean_last_six_months
-
-# Point 2
-
-# TODO: for **concentration** rebalancig perturbate anagraficapazientiattivi too and the values of the events.
-
-# Deep Learning Stuff ##########################################################
-
-# Data preparation
-
-# Since the only case in which STITCH codes convey useful information is when
-# the AMD code is NA we the a simple substitution of the NAs with the STITCH
-# codes and remove the column entirely.
-assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD927'].codicestitch == 'STITCH001').all()
-assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD013'].codicestitch == 'STITCH002').all()
-assert (esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd == 'AMD304'].codicestitch == 'STITCH005').all()
-assert esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isna()].codicestitch.isin(['STITCH003', 'STITCH004']).all()
-esamilaboratorioparametricalcolati.codiceamd.update(
-	esamilaboratorioparametricalcolati[esamilaboratorioparametricalcolati.codiceamd.isna()].codicestitch
-)
-assert not esamilaboratorioparametricalcolati.codiceamd.isna().any()
-esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.drop('codicestitch', axis=1)
-
-#####this will be sostituted by a load#######
-
-
-X = pandas.concat([
-	                          diagnosi[['idcentro', 'idana', 'data', 'codiceamd']],
-	         esamilaboratorioparametri[['idcentro', 'idana', 'data', 'codiceamd']],
-	esamilaboratorioparametricalcolati[['idcentro', 'idana', 'data', 'codiceamd']],
-	                  esamistrumentali[['idcentro', 'idana', 'data', 'codiceamd']],
-	        prescrizionidiabetefarmaci[['idcentro', 'idana', 'data', 'codiceatc']].rename({'codiceatc': 'codiceamd'}, axis=1),
-	     prescrizionidiabetenonfarmaci[['idcentro', 'idana', 'data', 'codiceamd']],
-	            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
-]).rename({'codiceamd': 'codice'}, axis=1)
-
-
-# There are probbaly less wasteful ways to do this but this is the easiest one
-# to keep labels in sync with the data.
-
+#cleaning the data for the model
 assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))
 X = X.join(anagraficapazientiattivi.y, ['idcentro', 'idana'])
 
@@ -216,8 +41,6 @@ X_macro = X_macro.merge(unique_micro, 'inner', ['idcentro', 'idana'])
 unique_macro = X_macro[["idana","idcentro"]].drop_duplicates().reset_index(drop=True)
 X_micro = X_micro.merge(unique_macro, 'inner', ['idcentro', 'idana'])
 
-# NOTE: this should be useless since we order again below.
-#X = X.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
 X_macro = X_macro.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
 X_micro = X_micro.sort_values(['idcentro', 'idana', 'data']).reset_index(drop=True)
 
@@ -241,9 +64,6 @@ X_micro = X_micro.reindex(columns=micro_columns_order)
 
 del macro_columns_order, micro_columns_order
 
-# NOTE: We could add a feature that represents the table from which the data
-# comes from.
-
 # Here we create a tensor for the history of each patients.
 # macro events with date
 s = X_macro.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
@@ -259,7 +79,6 @@ labels = torch.split(torch.tensor(X_macro.y.values), list(splits))
 labels = [t[0] for t in labels]
 del s, indexes, tot, splits
 
-
 #micro events without date
 s = X_micro.sort_values(['idcentro', 'idana']).reset_index(drop=True)
 indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
@@ -271,8 +90,8 @@ micro_codes = torch.split(torch.tensor(X_micro.codice.values), list(splits))
 # Since they are all equal.
 del s, indexes, tot, splits
 
-
 split = int(len(labels)*.8) # 80% of the data
+
 train_codes = codes[:split]
 train_seniorities = seniorities[:split]
 train_micro_codes = micro_codes[:split]
@@ -282,20 +101,18 @@ test_codes = codes[split:]
 test_seniorities = seniorities[split:]
 test_micro_codes = micro_codes[split:]
 test_labels = labels[split:]
+
 assert len(train_codes) + len(test_codes) == len(codes)
 assert len(train_seniorities) + len(test_seniorities) == len(seniorities)
 assert len(train_labels) + len(test_labels) == len(labels)
 assert len(train_micro_codes) + len(test_micro_codes) == len(micro_codes)
 del split
 
-print(len(micro_codes), len(codes))
 
 class TensorListDataset(torch.utils.data.Dataset):
 
 		def __init__(self, *tensors_lists) -> None:
 			lengths = [len(tensors_list) for tensors_list in tensors_lists]
-			for tensors_list in tensors_lists:
-				print(len(tensors_list))
 			if not all(lengths[0] == length for length in lengths):
 				raise ValueError("All lists of tensors must have the same length.")
 			# NOTE: all list should contain only tensors.
@@ -307,9 +124,6 @@ class TensorListDataset(torch.utils.data.Dataset):
 		def __getitem__(self, index):
 			return tuple(tensors_list[index] for tensors_list in self.tensors_lists)
 
-train_dataset = TensorListDataset(train_seniorities, train_codes, train_micro_codes, train_labels)
-test_dataset = TensorListDataset(test_seniorities, test_codes, test_micro_codes, test_labels)
-
 def collate_fn(batch):
 	seniorities = torch.nn.utils.rnn.pad_sequence(
 			[seniority for seniority, _, _, _ in batch],
@@ -319,7 +133,11 @@ def collate_fn(batch):
 	codes = torch.nn.utils.rnn.pad_sequence([code for _, code, _, _ in batch], True, 0)
 	micro_codes = torch.nn.utils.rnn.pad_sequence([micro_code for _, _, micro_code, _ in batch], True, 0)
 	labels = torch.tensor([label for _, _, _, label in batch])
-	return seniorities, codes, microcodes, labels
+
+	return seniorities, codes, micro_codes, labels
+
+train_dataset = TensorListDataset(train_seniorities, train_codes, train_micro_codes, train_labels)
+test_dataset = TensorListDataset(test_seniorities, test_codes, test_micro_codes, test_labels)
 
 train_dataloader = torch.utils.data.DataLoader(
 		dataset=train_dataset,
@@ -347,11 +165,16 @@ class Model(torch.nn.Module):
 			lstm_batch_first: bool,
 			lstm_dropout: float,
 			lstm_bidirectional: bool,
-			lstm_proj_size: int
+			lstm_proj_size: int,
+			mlp_output_size: int
 		) -> None:
 		super().__init__()
 
 		self.codes_embeddings = torch.nn.Embedding(
+			num_embeddings, embedding_dim, padding_idx=0
+		)
+
+		self.micro_codes_embeddings = torch.nn.Embedding(
 			num_embeddings, embedding_dim, padding_idx=0
 		)
 
@@ -366,19 +189,36 @@ class Model(torch.nn.Module):
 			lstm_proj_size
 		)
 
+		self.mlp = torch.nn.Sequential(
+    # Input layer
+    torch.nn.Linear(embedding_dim, embedding_dim*4),
+    torch.nn.ReLU(),
+    # Hidden layers
+    torch.nn.Linear(embedding_dim*4, embedding_dim*2),
+    torch.nn.ReLU(),
+    torch.nn.Linear(embedding_dim*2, embedding_dim),
+    torch.nn.ReLU(),
+    # Output layer
+    torch.nn.Linear(embedding_dim, mlp_output_size),
+	)
+
 		# if lstm_bidirectional the input size doubles
-		classifier_input_size = 2*lstm_hidden_size if lstm_bidirectional \
-			else lstm_hidden_size
+		classifier_input_size = 2*lstm_hidden_size + mlp_output_size if lstm_bidirectional \
+			else lstm_hidden_size + mlp_output_size
+
 		self.classifier = torch.nn.Sequential(
 			torch.nn.Linear(classifier_input_size, classifier_input_size//2),
 			torch.nn.ReLU(),
 			torch.nn.Linear(classifier_input_size//2, 1)
 		)
 
+
+
 	def forward(
 			self,
 			X_seniority: torch.Tensor,
 			X_codes: torch.Tensor,
+			X_micro_codes: torch.Tensor
 		) -> torch.Tensor:
 		assert X_seniority.shape[:2] == X_codes.shape[:2]
 
@@ -389,47 +229,122 @@ class Model(torch.nn.Module):
 
 		o, (h, c) = self.lstm(X)
 
-		res = self.classifier(h) # logits
+		X_micro_codes_embeddings = self.codes_embeddings(X_micro_codes)
+
+		X_micro = self.mlp(X_micro_codes_embeddings)
+		micro_state = torch.mean(X_micro, dim=1)
+
+		concat = torch.cat((h[-1], micro_state), dim=1)
+
+		res = self.classifier(concat) # logits
 
 		return res
 
+net = Model(
+		num_embeddings=len(codes), 
+		embedding_dim=50,
+		lstm_hidden_size=20,
+		lstm_num_layers=1,
+		lstm_bias=True,
+		lstm_batch_first=True,
+		lstm_dropout=0.1, # Probability of removing.
+		lstm_bidirectional=False,
+		lstm_proj_size=0, # I don't know what this does.
+		mlp_output_size=20
+	)
 
-"""import optuna
-from optuna.visualization import plot_contour, plot_edf, plot_optimization_history,\
-  plot_parallel_coordinate, plot_param_importances, plot_slice  
+def train(
+		net: torch.nn.Module,
+		epochs: int,
+		patience: int,
+		train_dataloader: torch.utils.data.DataLoader,
+		logit_normalizer: torch.nn.Module,
+		label_postproc: torch.nn.Module,
+		criterion: torch.nn.Module,
+		optimizer, # no type here :( torch.optimizer.Optimizer
+		test_dataloader: torch.utils.data.DataLoader
+	) -> float:
+	patience_kept = 0
+	best_epoch = 0
+	best_accuracy = float('-inf')
 
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
+	for epoch in range(epochs):
+		if patience_kept >= patience: break
 
-#each patient is represented by two tensors
-#TENSOR 1: contains only the macroevents of the patient, *with* timestamps 
-#TENSOR 2: contains only the microevents, without timesamps, processed by an invariant LSTM
-#they are later combined into a fully connected layer
-class MyModel(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(MyModel, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size)
-        self.set2set = nn.Set2Set(input_size, processing_steps=2)
-        self.fc = nn.Linear(hidden_size + input_size, output_size)
+		net.train()
+		losses: list[float] = []
+		for i, (seniorities, codes, micro_codes, labels) in enumerate(train_dataloader):
+			# NOTE: should tensors be moved here to device instead of a priori?
+			seniorities: torch.Tensor
+			codes: torch.Tensor
+			micro_codes: torch.Tensor
+			labels: torch.Tensor
 
-    def forward(self, x1, x2):
-        x1, _ = self.lstm(x1)
-        x1 = x1[-1]
-        x2 = self.set2set(x2)
-        x = torch.cat((x1, x2), dim=1)
-        x = self.fc(x)
-        return x
+			logits = net(seniorities, codes, micro_codes)
+			predictions = logit_normalizer(logits)
 
+			loss = criterion(predictions.squeeze(), label_postproc(labels).to(torch.float32).squeeze())
+			losses.append(loss.item())
+
+			loss.backward()
+
+			optimizer.step()
+			optimizer.zero_grad()
+		avg_loss = torch.mean(torch.tensor(losses))
+
+		net.eval()
+		correct = 0
+		with torch.no_grad():
+			for seniorities, codes, micro_codes, labels in test_dataloader:
+				logits = net(seniorities, codes, micro_codes)
+				predictions = (logit_normalizer(logits) > 0.5).squeeze()
+
+				# assert (predictions < N_CLASSES).all()
+				# assert (labels < N_CLASSES).all()
+				# assert predictions.shape == labels.shape, f"{predictions.shape} {labels.shape}"
+
+				correct += (predictions == labels).sum().item()
+		accuracy = correct/len(test_dataloader.dataset)
+		assert accuracy <= 1.0
+
+		if accuracy > best_accuracy:
+			patience_kept = 0
+			# best_params = net.params()
+			best_epoch = epoch
+			best_accuracy = accuracy
+			marker = ' *'
+		else:
+			patience_kept += 1
+			marker = ''
+
+		print(f'{epoch=:02} {accuracy=:.3f} {avg_loss=:.3f}{marker}')
+
+	print(f'{best_epoch=} {best_accuracy=:.3f}')
+	return best_accuracy
+
+
+
+_ = train(
+	net,
+	50,
+	5,
+	train_dataloader,
+	torch.nn.Softmax(dim=1),
+	torch.nn.Identity(),
+	torch.nn.BCELoss(),
+	torch.optim.SGD(net.parameters(), lr=0.01),
+	test_dataloader
+)
+
+
+import optuna
 
 # Define the objective function for Optuna
-def objective(trial):
+"""def objective(trial):
     # Sample the hyperparameters
-    input_size = trial.suggest_int("input_size", 50, 300)
     hidden_size = trial.suggest_int("hidden_size", 50, 300)
     num_layers = trial.suggest_int("num_layers", 1, 3)
-    num_classes = 2
-    batch_size = trial.suggest_int("batch_size", 8, 64)
+    batch_size = trial.suggest_int("batch_size", 4, 64)
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
     weight_decay = trial.suggest_loguniform("weight_decay", 1e-10, 1e-3)
     num_epochs = trial.suggest_int("num_epochs", 10, 100)
@@ -458,12 +373,12 @@ def objective(trial):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
-			trial.report(loss, i+1)
+						#trial.report(loss, i+1)
 
     		if trial.should_prune():
       			raise optuna.TrialPruned()
 
   	return loss
-           
-study = optuna.create_study(study_name="RidgeRegression")
-study.optimize(objective, n_trials=15)"""
+           """
+#study = optuna.create_study(study_name="Task3")
+#study.optimize(objective, n_trials=15)"""

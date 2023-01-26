@@ -75,20 +75,23 @@ logging.info(f'After  six months cleaning: {len(prescrizioninondiabete)=}')
 
 del all_events, last_event
 
-n_to_drop = len(anagraficapazientiattivi[~anagraficapazientiattivi.y]) - len(anagraficapazientiattivi[anagraficapazientiattivi.y])
-balanced_anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[~anagraficapazientiattivi.y].sample(n_to_drop, random_state=rng).index)
+balancing == 'advanced'
 
-xx = balanced_anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
-diagnosi = diagnosi.merge(xx, 'inner')
-esamilaboratorioparametri = esamilaboratorioparametri.merge(xx, 'inner')
-esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(xx, 'inner')
-esamistrumentali = esamistrumentali.merge(xx, 'inner')
-prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(xx, 'inner')
-prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(xx, 'inner')
-prescrizioninondiabete = prescrizioninondiabete.merge(xx, 'inner')
-del xx
+if balancing == 'advanced':
+	n_to_drop = len(anagraficapazientiattivi[~anagraficapazientiattivi.y]) - len(anagraficapazientiattivi[anagraficapazientiattivi.y])
+	balanced_anagraficapazientiattivi = anagraficapazientiattivi.drop(anagraficapazientiattivi[~anagraficapazientiattivi.y].sample(n_to_drop, random_state=rng).index)
 
-if False:
+	xx = balanced_anagraficapazientiattivi.index.to_frame().reset_index(drop=True)
+	diagnosi = diagnosi.merge(xx, 'inner')
+	esamilaboratorioparametri = esamilaboratorioparametri.merge(xx, 'inner')
+	esamilaboratorioparametricalcolati = esamilaboratorioparametricalcolati.merge(xx, 'inner')
+	esamistrumentali = esamistrumentali.merge(xx, 'inner')
+	prescrizionidiabetefarmaci = prescrizionidiabetefarmaci.merge(xx, 'inner')
+	prescrizionidiabetenonfarmaci = prescrizionidiabetenonfarmaci.merge(xx, 'inner')
+	prescrizioninondiabete = prescrizioninondiabete.merge(xx, 'inner')
+	del xx
+
+if balancing == 'naive':
 	logging.info('Starting to balance the dataset.')
 
 	assert (positive_patients == positive_patients.drop_duplicates()).all().all(), \
@@ -458,12 +461,12 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	print(f'{len(codes)=}')
 	net = LSTM(
 		num_embeddings=len(codes),
-		embedding_dim=100,
-		lstm_hidden_size=40,
+		embedding_dim=150,
+		lstm_hidden_size=70,
 		lstm_num_layers=3,
 		lstm_bias=True,
 		lstm_dropout=0.1, # Probability of removing.
-		lstm_bidirectional=True,
+		lstm_bidirectional=False,
 		lstm_proj_size=0, # I don't know what this does.
 		has_seniority=True,
 		has_interval=True
@@ -473,14 +476,14 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	logit_normalizer = lambda x: torch.nn.functional.softmax(x.squeeze(), dim=0)
 	_ = train_classifier(
 		net=net,
-		epochs=3,
-		patience=3,
+		epochs=10,
+		patience=10,
 		train_dataloader=train_dataloader,
 		logit_normalizer=logit_normalizer,
 		label_postproc=lambda x: x.to(torch.float32),
 		get_prediction=lambda logits: (logit_normalizer(logits) > 0.5).squeeze(),
 		criterion=torch.nn.BCELoss(),
-		optimizer=torch.optim.SGD(net.parameters(), lr=0.001),
+		optimizer=torch.optim.SGD(net.parameters(), lr=0.01),
 		test_dataloader=test_dataloader
 	)
 

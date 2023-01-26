@@ -273,6 +273,8 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 		            prescrizioninondiabete[['idcentro', 'idana', 'data', 'codiceamd']],
 	]).rename({'codiceamd': 'codice'}, axis=1)
 
+	X.to_pickle("data/X_clean.pickle.zip", 'infer', -1)
+
 	# There are probbaly less wasteful ways to do this but this is the easiest one
 	# to keep labels in sync with the data.
 	assert len(X) == len(X.join(anagraficapazientiattivi.y, ['idcentro', 'idana']))

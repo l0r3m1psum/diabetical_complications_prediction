@@ -312,10 +312,10 @@ def train(
 def objective(trial):
 
 	embedding_dim = trial.suggest_int("embedding_dim", 50, 100, step=10)
-	lstm_hidden_size = trial.suggest_int("lstm_hidden_size", 8, 32, log=True)
-	lstm_num_layers = trial.suggest_int("lstm_num_layers", 2, 3)
+	lstm_hidden_size = trial.suggest_int("lstm_hidden_size", 16, 32, log=True)
+	lstm_num_layers = trial.suggest_int("lstm_num_layers", 1, 2)
 	lstm_dropout = trial.suggest_float("lstm_dropout", 0.1, 0.4, step=0.1)
-	mlp_output_size = trial.suggest_int("mlp_output_size", 10, 100, step=0.1)
+	mlp_output_size = trial.suggest_int("mlp_output_size", 10, 100, step=10)
 
 	net = Model(
 			num_embeddings=len(codes), 
@@ -330,7 +330,7 @@ def objective(trial):
 			mlp_output_size=mlp_output_size
 		)
 
-	n_epochs = trial.suggest_int("n_epochs", 5, 25)
+	n_epochs = trial.suggest_int("n_epochs", 5, 20, step=5)
 	learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
 
 	accuracy = train(
@@ -347,8 +347,7 @@ def objective(trial):
 
 	return -accuracy
 
-study = optuna.create_study(study_name="Task3")
-study.optimize(objective, n_trials=10)
-best_params = study.best_params
+study = optuna.create_study(study_name="Bayesian optimization")
+study.optimize(objective, n_trials=50)
 print("Best accuracy: ", -study.best_value)
-print("Best hyperparameters", best_params)
+print("Best hyperparameters", study.best_params)

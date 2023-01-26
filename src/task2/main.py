@@ -75,7 +75,7 @@ logging.info(f'After  six months cleaning: {len(prescrizioninondiabete)=}')
 
 del all_events, last_event
 
-balancing == 'advanced'
+balancing = 'advanced'
 
 if balancing == 'advanced':
 	n_to_drop = len(anagraficapazientiattivi[~anagraficapazientiattivi.y]) - len(anagraficapazientiattivi[anagraficapazientiattivi.y])

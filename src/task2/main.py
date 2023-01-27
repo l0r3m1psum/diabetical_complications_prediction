@@ -13,7 +13,7 @@ del pool
 
 seed = 42
 rng = numpy.random.default_rng(seed)
-number_of_duplications = 6 # TODO: right now n-1 duplications are added to the data. This have to be changed.
+number_of_duplications = 6
 assert number_of_duplications > 0
 batch_size = 128
 torch.manual_seed(seed)
@@ -156,7 +156,6 @@ if balancing == 'naive':
 	assert xx.y.all()
 	xx = xx.merge(bijection).drop(['iddup', 'idana'], axis=1) \
 		.rename({'index': 'idana'}, axis=1).set_index(['idcentro', 'idana'])
-	# TODO: perturbate data in xx
 	anagraficapazientiattivi = pandas.concat([anagraficapazientiattivi, xx])
 
 	logging.info(f'The difference between y=1 and y=0 is {anagraficapazientiattivi.y.sum() - (~anagraficapazientiattivi.y).sum()}')
@@ -173,8 +172,6 @@ if balancing == 'naive':
 		last_event_positive_patients, clean_last_six_months
 
 # Point 2
-
-# TODO: for **concentration** rebalancig perturbate anagraficapazientiattivi too and the values of the events.
 
 # Deep Learning Stuff ##########################################################
 
@@ -310,7 +307,6 @@ if which_model_to_use == 'LSTM' or which_model_to_use == 'both':
 	# comes from.
 
 	# Here we create a tensor for the history of each patients.
-	# TODO: put some assertions to verify that this split is correct.
 	s = X.sort_values(['idcentro', 'idana', 'seniority']).reset_index(drop=True)
 	indexes = numpy.nonzero(numpy.diff(s.idana.values))[0]+1
 	tot = len(X)
@@ -573,7 +569,6 @@ if which_model_to_use == 'BERT' or which_model_to_use == 'both':
 		tokens = tokenizer(strings, return_tensors="pt", max_length=512,
 			truncation=True, padding=True)
 		return tokens, labels
-	# TODO: shuffle train data.
 	train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=64,
 		collate_fn=collate_fn)
 	test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=64,

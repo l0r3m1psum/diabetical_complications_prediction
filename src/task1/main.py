@@ -341,7 +341,6 @@ anagraficapazientiattivi = anagraficapazientiattivi.join(
 )
 logging.info(f'After  point 5: {len(anagraficapazientiattivi)=}')
 
-# TODO: review correctness...
 def compute_class_distribution():
 	pazienti = globals()['anagraficapazientiattivi'][:]
 	try:
@@ -365,8 +364,6 @@ def compute_class_distribution():
 del patients, all_events, last_event, last_cardiovascular_event
 
 # Point 6
-# TODO: log this step and make sure that the indexes are always correctly and
-# don't have to be reseted every time.
 
 assert not anagraficapazientiattivi.sesso.isna().any()
 
